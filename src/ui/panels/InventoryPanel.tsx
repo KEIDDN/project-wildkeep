@@ -1,6 +1,6 @@
 import { durabilityOf, maxDurability, wearState } from "../../game/systems/durability";
 import { getGame } from "../../engine/gameInstance";
-import { useState } from "react";
+import { useCallback, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useInventoryStore } from "../../store/inventoryStore";
 import { usePlayerStore } from "../../store/playerStore";
 import { useSocialStore } from "../../store/socialStore";
@@ -9,7 +9,7 @@ import { getEnemy } from "../../data/enemies";
 import { STAMINA } from "../../data/combat";
 import { staminaBonus } from "../../data/talents";
 import type { EquipmentSaveState } from "../../game/save/schema";
-import { RARITY_COLOR, RARITY_INK, rarityRank } from "../../game/core/types";
+import { RARITY_COLOR, RARITY_INK } from "../../game/core/types";
 import { computeRelicEffects } from "../../game/systems/statsSystem";
 import { playerEffectiveStats } from "../../game/systems/playerStats";
 import { useUiStore } from "../../store/uiStore";
@@ -19,9 +19,16 @@ import { honorRank } from "../../game/social/honor";
 import { Panel } from "../components/Panel";
 import { EmptySlot, ItemIcon } from "../components/ItemIcon";
 import { CharacterPreview } from "../components/CharacterPreview";
-import type { InventoryStack } from "../../game/save/schema";
 import { enemyName, itemDesc, itemName } from "../../i18n/content";
 import { t } from "../../i18n";
+import { audio } from "../../game/audio/AudioManager";
+import { CROP_BY_SEED } from "../../data/crops";
+import { selectSeed } from "../../game/farming";
+import { bagLayout, BAG_MIN_SLOTS, type SortMode } from "../../game/inventoryLayout";
+import { beginItemDrag, DragGhost, useDraggedItem } from "../components/DragItem";
+import { ContextMenu, type MenuAction, type MenuState } from "../components/ContextMenu";
+
+export { sortStacks } from "../../game/inventoryLayout";
 
 /**
  * Paper doll: every slot sits next to the part of the body it covers, so
@@ -38,24 +45,22 @@ const DOLL: { slot: EquipSlot | "offhand"; area: string; ghost: string }[] = [
   { slot: "relic", area: "relic", ghost: "clover" },
 ];
 
-const CATEGORY_ORDER = ["weapon", "armor", "tool", "accessory", "relic", "consumable", "utility", "resource"];
-const BAG_SLOTS = 35;
+type Selection = { itemId: string; from: "bag" | EquipSlot; stolen?: boolean; index?: number };
 
-export function sortStacks(stacks: InventoryStack[]): InventoryStack[] {
-  return [...stacks].sort((a, b) => {
-    const da = getItem(a.itemId);
-    const db = getItem(b.itemId);
-    return (
-      Number(!!db.keyItem) - Number(!!da.keyItem) ||
-      CATEGORY_ORDER.indexOf(da.category) - CATEGORY_ORDER.indexOf(db.category) ||
-      rarityRank(db.rarity) - rarityRank(da.rarity) ||
-      itemName(da.id).localeCompare(itemName(db.id)) ||
-      Number(!!a.stolen) - Number(!!b.stolen)
-    );
-  });
+const SORT_MODES: SortMode[] = ["type", "rarity", "value", "name"];
+
+/** "Eat" / "Drink" / "Use" / "Read" / "Equip" — the one thing this item does. */
+function useLabel(def: ItemDef): string | null {
+  if (def.equipSlot) return t("inventory.action.equip");
+  if (def.healAmount || def.mana || def.energy) return t(def.id.includes("potion") || def.id.includes("elixir") || def.id.includes("salve") ? "inventory.action.drink" : "inventory.action.eat");
+  if (def.useEffect) return t(def.useEffect === "return_home" ? "inventory.action.read" : "inventory.action.use");
+  return null;
 }
 
-type Selection = { itemId: string; from: "bag" | EquipSlot; stolen?: boolean };
+function deny(msg?: string) {
+  audio.sfx("deny");
+  if (msg) useUiStore.getState().pushToast(msg, "warning");
+}
 
 export function InventoryPanel() {
   const stacks = useInventoryStore((s) => s.stacks);
@@ -71,14 +76,115 @@ export function InventoryPanel() {
   const wear = usePlayerStore((s) => s.wear);
   const stats = playerEffectiveStats({ baseStats, equipment, skills, talents, wear }, houseLevel);
   const relic = computeRelicEffects(equipment);
-  const sorted = sortStacks(stacks);
+  const grid = bagLayout(stacks, BAG_MIN_SLOTS);
   const selectedDef = selected ? getItem(selected.itemId) : null;
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const dragged = useDraggedItem();
 
   const use = (def: ItemDef) => {
     if (def.equipSlot) equipItem(def.id);
     else if (def.healAmount || def.energy || def.mana) consumeFood(def.id);
     else if (def.useEffect) useUtilityItem(def.id);
   };
+  // ---- drag & drop ------------------------------------------------------------
+  const dragFromBag = (e: ReactPointerEvent, index: number) => {
+    const s = useInventoryStore.getState().stacks[index];
+    if (!s) return;
+    const def = getItem(s.itemId);
+    beginItemDrag(e, {
+      itemId: s.itemId,
+      quantity: s.quantity,
+      accepts: (target) => target.startsWith("bag:") || target === `equip:${def.equipSlot}`,
+      onDrop: (target) => {
+        if (target.startsWith("equip:")) {
+          equipItem(def.id, index);
+          setSelected(null);
+          return;
+        }
+        const r = useInventoryStore.getState().moveToSlot(index, Number(target.slice(4)));
+        if (r !== "none") audio.sfx(r === "merged" ? "coin" : "ui", { pitch: r === "merged" ? 1.3 : 1.1 });
+      },
+      onReject: (target) => deny(target.startsWith("equip:") ? t("inventory.wrongSlot") : undefined),
+    });
+  };
+  const dragFromDoll = (e: ReactPointerEvent, slot: EquipSlot, id: string) => {
+    beginItemDrag(e, {
+      itemId: id,
+      accepts: (target) => target.startsWith("bag:"),
+      onDrop: (target) => {
+        const to = Number(target.slice(4));
+        const inv = useInventoryStore.getState();
+        const occupant = bagLayout(inv.stacks)[to];
+        // Dropped on something that fits this slot: swap them over.
+        if (occupant >= 0 && getItem(inv.stacks[occupant].itemId).equipSlot === slot) {
+          equipItem(inv.stacks[occupant].itemId, occupant);
+        } else unequipSlot(slot);
+        const after = useInventoryStore.getState();
+        const back = after.stacks.length - 1;
+        if (after.stacks[back]?.itemId === id) after.moveToSlot(back, to);
+        setSelected(null);
+      },
+    });
+  };
+
+  // ---- right-click ------------------------------------------------------------
+  const bagMenu = (e: ReactMouseEvent, index: number) => {
+    e.preventDefault();
+    const s = useInventoryStore.getState().stacks[index];
+    if (!s) return;
+    const def = getItem(s.itemId);
+    const actions: MenuAction[] = [];
+    const main = useLabel(def);
+    if (main)
+      actions.push({
+        label: main,
+        primary: true,
+        onSelect: () => {
+          if (def.equipSlot) equipItem(def.id, index);
+          else use(def);
+        },
+      });
+    if (CROP_BY_SEED[def.id])
+      actions.push({
+        label: t("inventory.action.plant"),
+        icon: "hoe",
+        onSelect: () => {
+          if (selectSeed(def.id)) useUiStore.getState().pushToast(t("inventory.seedReady", { name: itemName(def.id) }), "info", { icon: def.icon });
+        },
+      });
+    if (def.stackable && s.quantity > 1) actions.push({ label: t("inventory.action.split"), onSelect: () => useInventoryStore.getState().splitStack(index) });
+    actions.push({ label: t("inventory.action.inspect"), onSelect: () => setSelected({ itemId: s.itemId, from: "bag", stolen: s.stolen, index }) });
+    setSelected({ itemId: s.itemId, from: "bag", stolen: s.stolen, index });
+    setMenu({ x: e.clientX, y: e.clientY, title: itemName(def.id), actions });
+  };
+  const dollMenu = (e: ReactMouseEvent, slot: EquipSlot, id: string) => {
+    e.preventDefault();
+    setSelected({ itemId: id, from: slot });
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      title: itemName(id),
+      actions: [
+        { label: t("inventory.action.unequip"), primary: true, onSelect: () => (unequipSlot(slot), setSelected(null)) },
+        { label: t("inventory.action.inspect"), onSelect: () => setSelected({ itemId: id, from: slot }) },
+      ],
+    });
+  };
+  const sortMenu = (e: ReactMouseEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenu({
+      x: r.left,
+      y: r.bottom + 4,
+      actions: SORT_MODES.map((m) => ({ label: t(`inventory.sort.${m}`), onSelect: () => sortBag(m) })),
+    });
+  };
+  const sortBag = (mode: SortMode) => {
+    useInventoryStore.getState().sortBag(mode);
+    audio.sfx("ui", { pitch: 0.9 });
+    setSelected(null);
+  };
+
   const act = (def: ItemDef) => {
     if (!selected) return;
     if (selected.from !== "bag") {
@@ -102,7 +208,11 @@ export function InventoryPanel() {
             {DOLL.map(({ slot, area, ghost }) => {
               const id = slot === "offhand" ? undefined : equipment[slot];
               return (
-                <div key={slot} className={`doll-slot doll-${area}`} title={slot === "offhand" ? t("inventory.offhandSoon") : undefined}>
+                <div
+                  key={slot}
+                  className={`doll-slot doll-${area}${dragged && getItem(dragged).equipSlot === slot ? " drop-hint" : ""}`}
+                  title={slot === "offhand" ? t("inventory.offhandSoon") : undefined}
+                >
                   {id ? (
                     <ItemIcon
                       itemId={id}
@@ -110,10 +220,13 @@ export function InventoryPanel() {
                       selected={selected?.from === slot}
                       onClick={() => setSelected({ itemId: id, from: slot as EquipSlot })}
                       onDoubleClick={() => unequipSlot(slot as EquipSlot)}
+                      onPointerDown={(e) => dragFromDoll(e, slot as EquipSlot, id)}
+                      onContextMenu={(e) => dollMenu(e, slot as EquipSlot, id)}
+                      dropId={`equip:${slot}`}
                       dur={{ cur: durabilityOf(slot as EquipSlot), max: maxDurability(id) }}
                     />
                   ) : (
-                    <EmptySlot size={48} ghost={ghost} />
+                    <EmptySlot size={48} ghost={ghost} dropId={`equip:${slot}`} />
                   )}
                   <span className={`equip-label${slot === "offhand" ? " locked" : ""}`}>{t(`inventory.slot.${slot}`)}</span>
                 </div>
@@ -138,28 +251,43 @@ export function InventoryPanel() {
         </div>
 
         <div className="inv-right">
-          <div className="section-title">{t("inventory.bag")}</div>
+          <div className="bag-head">
+            <div className="section-title">{t("inventory.bag")}</div>
+            <div className="sort-ctl">
+              <button type="button" className="btn btn-small" onClick={() => sortBag("type")}>
+                {t("inventory.sort.button")}
+              </button>
+              <button type="button" className="btn btn-small sort-more" title={t("inventory.sort.more")} aria-label={t("inventory.sort.more")} onClick={sortMenu}>
+                ▾
+              </button>
+            </div>
+          </div>
           <div className="bag-grid">
-            {sorted.map((s, i) => (
-              <ItemIcon
-                key={`${s.itemId}-${s.stolen ? "s" : ""}-${i}`}
-                itemId={s.itemId}
-                quantity={s.quantity}
-                stolen={s.stolen}
-                size={44}
-                dur={s.dur !== undefined ? { cur: s.dur, max: maxDurability(s.itemId) } : null}
-                selected={selected?.from === "bag" && selected.itemId === s.itemId && !!selected.stolen === !!s.stolen}
-                onClick={() => setSelected({ itemId: s.itemId, from: "bag", stolen: s.stolen })}
-                onDoubleClick={() => {
-                  const def = getItem(s.itemId);
-                  use(def);
-                  if (def.equipSlot || !useInventoryStore.getState().hasItem(def.id)) setSelected(null);
-                }}
-              />
-            ))}
-            {Array.from({ length: Math.max(0, BAG_SLOTS - sorted.length) }, (_, i) => (
-              <EmptySlot key={`e${i}`} size={44} />
-            ))}
+            {grid.map((i, slot) => {
+              const s = i >= 0 ? stacks[i] : null;
+              if (!s) return <EmptySlot key={`e${slot}`} size={44} dropId={`bag:${slot}`} />;
+              return (
+                <ItemIcon
+                  key={`${s.itemId}-${slot}`}
+                  itemId={s.itemId}
+                  quantity={s.quantity}
+                  stolen={s.stolen}
+                  size={44}
+                  dropId={`bag:${slot}`}
+                  dur={s.dur !== undefined ? { cur: s.dur, max: maxDurability(s.itemId) } : null}
+                  selected={selected?.from === "bag" && (selected.index !== undefined ? selected.index === i : selected.itemId === s.itemId && !!selected.stolen === !!s.stolen)}
+                  onClick={() => setSelected({ itemId: s.itemId, from: "bag", stolen: s.stolen, index: i })}
+                  onPointerDown={(e) => dragFromBag(e, i)}
+                  onContextMenu={(e) => bagMenu(e, i)}
+                  onDoubleClick={() => {
+                    const def = getItem(s.itemId);
+                    if (def.equipSlot) equipItem(def.id, i);
+                    else use(def);
+                    if (def.equipSlot || !useInventoryStore.getState().hasItem(def.id)) setSelected(null);
+                  }}
+                />
+              );
+            })}
           </div>
 
           <div className="item-detail">
@@ -169,7 +297,11 @@ export function InventoryPanel() {
                 equipped={selected?.from !== "bag"}
                 stolen={selected?.stolen}
                 onAct={() => act(selectedDef)}
-                dur={selected && selected.from !== "bag" ? durabilityOf(selected.from) : sorted.find((s) => s.itemId === selectedDef.id && !!s.stolen === !!selected?.stolen)?.dur}
+                dur={
+                  selected && selected.from !== "bag"
+                    ? durabilityOf(selected.from)
+                    : (selected?.index !== undefined ? stacks[selected.index]?.dur : stacks.find((s) => s.itemId === selectedDef.id && !!s.stolen === !!selected?.stolen)?.dur)
+                }
               />
             ) : (
               <div className="empty-hint">{t("inventory.selectHint")}</div>
@@ -177,6 +309,8 @@ export function InventoryPanel() {
           </div>
         </div>
       </div>
+      <DragGhost />
+      <ContextMenu menu={menu} onClose={closeMenu} />
     </Panel>
   );
 }

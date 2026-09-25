@@ -152,6 +152,17 @@ export class RouletteTable {
     this.bump();
   }
 
+  /** Leaving the table: pay out a spin still turning, then clear the board
+   * (last result and chips) so the next visit starts clean. The "recent
+   * numbers" board stays: it belongs to the table, not to your session. */
+  leave(): void {
+    this.settle();
+    if (!this.current && this.bets.size === 0) return;
+    this.current = null;
+    this.bets.clear();
+    this.bump();
+  }
+
   private bump() {
     this.version++;
     for (const fn of Array.from(this.listeners)) fn();

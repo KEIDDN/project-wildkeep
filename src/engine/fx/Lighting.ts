@@ -1,5 +1,6 @@
 import { Container, Graphics, RenderTexture, Sprite, Texture, type Renderer } from "pixi.js";
 import type { Camera } from "../Camera";
+import type { VisionMap } from "./Vision";
 
 export interface LightSource {
   x: number;
@@ -68,6 +69,10 @@ export class Lighting {
   private rt: RenderTexture;
   private scene = new Container();
   private ambientFill = new Graphics();
+  private lightLayer = new Container();
+  /** Line-of-sight fog, multiplied over ambient + lights (dungeons). */
+  private visionSprite = new Sprite();
+  private vision: VisionMap | null = null;
   private pool: Sprite[] = [];
   private flarePool: Sprite[] = [];
   private time = 0;
@@ -81,7 +86,19 @@ export class Lighting {
     this.rt = RenderTexture.create({ width: 16, height: 16, scaleMode: "nearest" });
     this.sprite = new Sprite(this.rt);
     this.sprite.blendMode = "multiply";
-    this.scene.addChild(this.ambientFill);
+    this.visionSprite.blendMode = "multiply";
+    this.visionSprite.visible = false;
+    this.scene.addChild(this.ambientFill, this.lightLayer, this.visionSprite);
+  }
+
+  /** Fog of war for the current area, or null for none. */
+  setVision(v: VisionMap | null): void {
+    this.vision = v;
+    this.visionSprite.visible = !!v;
+    if (v) {
+      this.visionSprite.texture = v.texture;
+      this.visionSprite.scale.set(v.cell);
+    }
   }
 
   get enabled(): boolean {
@@ -142,7 +159,7 @@ export class Lighting {
         s.anchor.set(0.5);
         s.blendMode = "add";
         this.pool.push(s);
-        this.scene.addChild(s);
+        this.lightLayer.addChild(s);
       }
       s.visible = true;
       s.position.set(lx, ly);
@@ -169,6 +186,11 @@ export class Lighting {
       }
     }
     for (let i = used; i < this.pool.length; i++) this.pool[i].visible = false;
+    if (this.vision) {
+      // Texel centres sit on tile centres; the border is dark.
+      const c = this.vision.cell;
+      this.visionSprite.position.set(-this.vision.border * c - gx0, -this.vision.border * c - gy0);
+    }
     for (let i = flares; i < this.flarePool.length; i++) this.flarePool[i].visible = false;
     this.renderer.render({ container: this.scene, target: this.rt, clear: true });
   }

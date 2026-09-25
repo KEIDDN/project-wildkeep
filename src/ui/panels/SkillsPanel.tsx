@@ -52,8 +52,10 @@ export function SkillsPanel() {
   );
 }
 
-const NODE_ROW = 96;
 const TREE_TOP = 44;
+/** Row spacing: roomy on tall screens, compact enough on 720p that the
+ * detail box below the tree still fits. */
+const nodeRow = () => Math.max(72, Math.min(96, Math.floor((window.innerHeight - 440) / 4)));
 
 function TalentTree() {
   const talents = usePlayerStore((s) => s.talents);
@@ -89,6 +91,7 @@ function TalentTree() {
   const focus = hover ? TALENTS.find((d) => d.id === hover)! : null;
   const statusOf = (d: TalentDef) => canLearn(d, talents, level, bonus, magicOpen);
   const rows = Math.max(...TALENTS.map((d) => d.tier)) + 1;
+  const NODE_ROW = nodeRow();
   return (
     <>
       <div className="talent-head">
@@ -105,7 +108,14 @@ function TalentTree() {
           const defs = TALENTS.filter((d) => d.branch === b);
           const sealed = b === "magic" && !magicOpen;
           const n = perBranch[bi].n;
-          const pos = (d: TalentDef) => ({ x: 18 + d.col * 32, y: TREE_TOP + d.tier * NODE_ROW + 30 });
+          // Node centres in % of the branch width (x) and px (y); the link
+          // SVG uses the same units.
+          const pos = (d: TalentDef) => ({ x: 20 + d.col * 30, y: TREE_TOP + d.tier * NODE_ROW + 30 });
+          // A link that skips a row bows sideways around any node in its way.
+          const bow = (parent: TalentDef, d: TalentDef) => {
+            const blocked = defs.some((o) => o.tier > parent.tier && o.tier < d.tier && Math.abs(o.col - (parent.col + ((d.col - parent.col) * (o.tier - parent.tier)) / (d.tier - parent.tier))) < 0.6);
+            return blocked ? (parent.col + d.col <= 2 ? -17 : 17) : 0;
+          };
           return (
             <div className={`ttree-branch branch-${b}${sealed ? " sealed" : ""}`} key={b}>
               <div className="ttree-title">
@@ -121,10 +131,14 @@ function TalentTree() {
                     const c = pos(d);
                     const lit = rank(talents, parent.id) >= d.requires!.rank;
                     const owned = rank(talents, d.id) > 0;
+                    const off = bow(parent, d);
+                    const path = off
+                      ? `M ${a.x} ${a.y} C ${a.x + off} ${a.y + (c.y - a.y) * 0.3}, ${c.x + off} ${a.y + (c.y - a.y) * 0.7}, ${c.x} ${c.y}`
+                      : `M ${a.x} ${a.y} C ${a.x} ${(a.y + c.y) / 2}, ${c.x} ${(a.y + c.y) / 2}, ${c.x} ${c.y}`;
                     return (
                       <path
                         key={d.id}
-                        d={`M ${a.x + 7} ${a.y} C ${a.x + 7} ${(a.y + c.y) / 2}, ${c.x + 7} ${(a.y + c.y) / 2}, ${c.x + 7} ${c.y}`}
+                        d={path}
                         className={`ttree-link${owned ? " owned" : lit ? " lit" : ""}`}
                         vectorEffect="non-scaling-stroke"
                       />
@@ -140,7 +154,7 @@ function TalentTree() {
                     type="button"
                     key={d.id}
                     className={`tnode${d.keystone ? " keystone" : ""}${r > 0 ? " owned" : ""}${r >= d.maxRank ? " maxed" : ""}${st === "ok" ? " available" : ""}${st === "locked" || st === "level" || st === "sealed" ? " locked" : ""}${hover === d.id ? " hovered" : ""}`}
-                    style={{ left: `${p.x + 7}%`, top: p.y }}
+                    style={{ left: `${p.x}%`, top: p.y }}
                     onMouseEnter={() => setHover(d.id)}
                     onFocus={() => setHover(d.id)}
                     onMouseLeave={() => setHover(null)}

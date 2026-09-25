@@ -14,6 +14,7 @@ import { ResourceNode } from "../../entities/ResourceNode";
 import { Entity, type Interactable } from "../../entities/Entity";
 import { InteractSpot, Prop } from "../../entities/Props";
 import type { LightSource } from "../../fx/Lighting";
+import { VisionMap } from "../../fx/Vision";
 import { usePlayerStore } from "../../../store/playerStore";
 import { floorProfile } from "../../../data/dungeonFloors";
 import { audio } from "../../../game/audio/AudioManager";
@@ -44,6 +45,7 @@ export function buildDungeon(game: Game): Area {
   area.ambient = theme.ambient;
   area.backdrop = 0x0c0b12;
   const rng = SeededRandom.fromString(`${d.seed}:render`);
+  area.vision = new VisionMap(d.width, d.height, TILE, (x, y) => !isFloor(d, x, y));
 
   // ---- collision -----------------------------------------------------------------
   for (let y = 0; y < d.height; y++) for (let x = 0; x < d.width; x++) if (!isFloor(d, x, y)) area.collision.setSolidCell(x, y);

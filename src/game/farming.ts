@@ -122,6 +122,13 @@ export function seedsOwned(): string[] {
 }
 
 let lastSeed: string | null = null;
+/** Choose which seed the next planting uses (inventory "Plant this"). */
+export function selectSeed(seed: string): boolean {
+  if (!CROP_BY_SEED[seed] || !useInventoryStore.getState().hasItem(seed)) return false;
+  lastSeed = seed;
+  return true;
+}
+
 export const lastSeedUsed = () => (lastSeed && useInventoryStore.getState().hasItem(lastSeed) ? lastSeed : (seedsOwned()[0] ?? null));
 
 export function plant(key: string, seed: string): boolean {

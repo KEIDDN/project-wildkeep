@@ -93,7 +93,7 @@ export const MERCHANTS: Record<string, MerchantDef> = {
     count: [5, 6],
     always: CROPS.slice(0, 3).map((c) => ({ itemId: c.seed, price: c.seedPrice })),
     pool: [
-      ...CROPS.slice(3).map((c) => ({ itemId: c.seed, price: c.seedPrice, weight: 3 })),
+      ...CROPS.slice(3).map((c) => ({ itemId: c.seed, price: c.seedPrice, weight: c.rare ? 1 : 3 })),
       { itemId: "apple_pie", price: 14, weight: 3 },
       { itemId: "herb", price: 5, weight: 3 },
       { itemId: "healroot", price: 16, weight: 2 },

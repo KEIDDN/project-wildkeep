@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { SocialSaveState } from "../game/save/schema";
 import { DEFAULT_SAVE } from "../game/save/schema";
+import type { Rumor } from "../game/social/rumors";
 
 /**
  * How Wildkeep sees you: Honor (−100 menace … +100 local hero), how well you
@@ -53,6 +54,7 @@ interface SocialState extends SocialSaveState {
   useToday: (key: string, day: number) => void;
   usedToday: (key: string, day: number) => boolean;
   setEvent: (day: number, id: string | null) => void;
+  setRumors: (rumors: Rumor[]) => void;
   loadFrom: (save: SocialSaveState) => void;
   serialize: () => SocialSaveState;
 }
@@ -116,9 +118,11 @@ export const useSocialStore = create<SocialState>((set, get) => ({
 
   setEvent: (day, id) => set({ event: { day, id } }),
 
-  loadFrom: (save) => set(structuredClone(save)),
+  setRumors: (rumors) => set({ rumors }),
+  // Older saves have no rumours: don't keep the last game's.
+  loadFrom: (save) => set({ rumors: [], ...structuredClone(save) }),
   serialize: () => {
     const s = get();
-    return { honor: s.honor, relationships: s.relationships, deeds: s.deeds, used: s.used, event: s.event, rep: s.rep, bounty: s.bounty, drunk: s.drunk };
+    return { honor: s.honor, relationships: s.relationships, deeds: s.deeds, used: s.used, event: s.event, rep: s.rep, bounty: s.bounty, drunk: s.drunk, rumors: s.rumors ?? [] };
   },
 }));

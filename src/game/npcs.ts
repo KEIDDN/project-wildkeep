@@ -11,6 +11,7 @@ import { interpolate, t, tl } from "../i18n";
 import { npcBarks, npcLines, npcName, npcTalk } from "../i18n/content";
 import { questDialogue } from "./quests";
 import { afterChange } from "./relationships";
+import { rumorLine } from "./social/rumors";
 import { bountyDialogue, finnFences, returnStolenDialogue } from "./social/reputation";
 
 /**
@@ -150,6 +151,9 @@ export function dialogueFor(def: NpcDef): Dialogue {
     lines = sets[n % sets.length];
   }
   const params = lineParams();
+  // They've heard what you've been up to, and they'd like you to know it.
+  const rumor = Math.random() < 0.6 ? rumorLine(def.id) : null;
+  if (rumor) lines = [rumor, ...lines];
   return {
     speaker: npcName(def),
     portrait: def.portrait,

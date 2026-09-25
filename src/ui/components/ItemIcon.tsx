@@ -1,3 +1,4 @@
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { getItem } from "../../data/items";
 import { RARITY_COLOR } from "../../game/core/types";
 import { itemName } from "../../i18n/content";
@@ -16,10 +17,14 @@ interface ItemIconProps {
   onDoubleClick?: () => void;
   /** Durability to show as a thin bar (gear only). */
   dur?: { cur: number; max: number } | null;
+  /** Drag & drop (see DragItem): press handler and this slot's drop id. */
+  onPointerDown?: (e: ReactPointerEvent) => void;
+  onContextMenu?: (e: ReactMouseEvent) => void;
+  dropId?: string;
 }
 
 /** Item slot with rarity-coloured frame and glow (stronger for rarer items). */
-export function ItemIcon({ itemId, quantity, size = 48, selected, equipped, stolen, dim, onClick, onDoubleClick, dur }: ItemIconProps) {
+export function ItemIcon({ itemId, quantity, size = 48, selected, equipped, stolen, dim, onClick, onDoubleClick, dur, onPointerDown, onContextMenu, dropId }: ItemIconProps) {
   const def = getItem(itemId);
   const color = RARITY_COLOR[def.rarity];
   const name = itemName(itemId);
@@ -30,6 +35,9 @@ export function ItemIcon({ itemId, quantity, size = 48, selected, equipped, stol
       style={{ width: size, height: size, ["--rarity" as string]: color }}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      onPointerDown={onPointerDown}
+      onContextMenu={onContextMenu}
+      data-drop={dropId}
       title={`${name} (${t(`common.rarity.${def.rarity}`)})${stolen ? ` · ${t("inventory.stolenTag")}` : ""}`}
     >
       <img src={`/icons/${def.icon}.png`} alt={name} draggable={false} />
@@ -46,9 +54,9 @@ export function ItemIcon({ itemId, quantity, size = 48, selected, equipped, stol
   );
 }
 
-export function EmptySlot({ size = 48, label, ghost }: { size?: number; label?: string; ghost?: string }) {
+export function EmptySlot({ size = 48, label, ghost, dropId }: { size?: number; label?: string; ghost?: string; dropId?: string }) {
   return (
-    <div className="slot empty" style={{ width: size, height: size }}>
+    <div className="slot empty" style={{ width: size, height: size }} data-drop={dropId}>
       {ghost && <img className="slot-ghost" src={`/icons/${ghost}.png`} alt="" draggable={false} />}
       {label && <span className="slot-label">{label}</span>}
     </div>

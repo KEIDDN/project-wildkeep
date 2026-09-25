@@ -665,6 +665,10 @@ ICONS = {
     "seed_strawberry": (4, 26), "seed_pumpkin": (5, 26), "seed_corn": (6, 26), "seed_melon": (9, 26),
     "crop_turnip": (5, 34), "crop_carrot": (8, 27), "crop_potato": (9, 27), "crop_tomato": (1, 27),
     "crop_strawberry": (0, 27), "crop_pumpkin": (13, 27), "crop_corn": (3, 36), "crop_melon": (12, 27),
+    "seed_onion": (8, 26), "crop_onion": (7, 27), "seed_cabbage": (11, 26), "crop_cabbage": (4, 34),
+    "seed_pepper": (4, 28), "crop_pepper": (5, 27), "seed_grape": (6, 26), "crop_grape": (10, 27),
+    "seed_duskberry": (13, 28), "crop_duskberry": (7, 36), "seed_healroot": (3, 28),
+    "seed_moonroot": (15, 28), "crop_moonroot": (5, 35),
     "femur": (6, 14),
     "cleaver_grukk": (5, 112),
     "crown_hollow": (6, 119),
@@ -868,7 +872,21 @@ INTERIORS = {
     "tavern": {
         "region": (0, 0, 640, 464),
         # Stairs and the corridor exit are drawn on the Walls layer; open them.
+        # Finer cells than the small rooms: with 8px cells a gap you could
+        # plainly see between two chairs was often one free cell, narrower
+        # than the player, i.e. an invisible wall.
+        "cell": 4,
+        # Props stripped from the art (and made walkable): the left leaf of
+        # the hinged bar flap swings open, so the kitchen and the pantry
+        # behind the bar can actually be reached.
+        "open": [(222, 189, 241, 211)],
         "walkable": [
+            (222, 189, 241, 211),  # open bar flap
+            # The aisles either side of the middle table read as walkable
+            # but were 8-9px wide (the player is 10): trim the bench/pillar
+            # edges a couple of pixels so the nook between the tables opens.
+            (366, 236, 378, 262),
+            (452, 236, 466, 262),
             (178, 335, 226, 420),  # hall -> corridor stairs
             (433, 112, 624, 144),  # casino platform steps
             (225, 111, 257, 145),  # kitchen -> hall steps
@@ -915,17 +933,24 @@ def build_interiors() -> None:
         bg = Image.new("RGBA", (rw, rh), (0, 0, 0, 255))
         src = layer_image(a, spec["layers"]) if "layers" in spec else base
         bg.alpha_composite(crop(src, rx, ry, rw, rh))
+        if spec.get("open"):
+            bare = layer_image(a, [l for l in base_layers if l not in ("Props_01", "Props_02", "Table_Tops")])
+            for (x0, y0, x1, y1) in spec["open"]:
+                patch = Image.new("RGBA", (x1 - x0, y1 - y0), (0, 0, 0, 255))
+                patch.alpha_composite(bare.crop((x0, y0, x1, y1)))
+                bg.paste(patch, (x0 - rx, y0 - ry))
         save(bg, f"sprites/interiors/{name}.png")
         ov = crop(above, rx, ry, rw, rh)
         has_overlay = ov.getbbox() is not None
         if has_overlay:
             save(ov, f"sprites/interiors/{name}_above.png")
         # Rooms with their furniture stripped only collide with walls.
-        rows = collision_grid(a, spec["region"], 8, spec["walkable"], spec["blocked"], () if "layers" in spec else ("Props_01", "Props_02"))
+        cell = spec.get("cell", 8)
+        rows = collision_grid(a, spec["region"], cell, spec["walkable"], spec["blocked"], () if "layers" in spec else ("Props_01", "Props_02"))
         manifest["interiors"][name] = {
             "w": rw,
             "h": rh,
-            "cell": 8,
+            "cell": cell,
             "overlay": has_overlay,
             "collision": rows,
         }

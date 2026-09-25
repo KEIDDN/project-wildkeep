@@ -58,6 +58,8 @@ export class Enemy extends Entity implements Hittable {
   hp: number;
   private body: CharacterSprite;
   private hpBar = new Graphics();
+  /** Little stars circling the head while stunned: "hit me now". */
+  private dizzy = new Graphics();
   /** Ground telegraph, drawn under the body. */
   private tele = new Graphics();
   private shieldG: Graphics | null = null;
@@ -145,7 +147,7 @@ export class Enemy extends Entity implements Hittable {
       12,
     );
     this.body.sprite.tint = this.baseTint;
-    this.view.addChild(this.tele, this.body.view, this.hpBar);
+    this.view.addChild(this.tele, this.body.view, this.hpBar, this.dizzy);
     if (this.guarded) {
       this.shieldG = new Graphics();
       this.shieldG.roundRect(-3, -8, 6, 11, 2).fill(0x5a6a88).stroke({ width: 1, color: 0x1a1016 });
@@ -422,9 +424,10 @@ export class Enemy extends Entity implements Hittable {
       case "stunned":
         this.body.play("idle");
         this.body.sprite.x = Math.sin(this.timer * 40) * 1;
-        if (Math.random() < dt * 6) game.fx.burst(this.x, this.y - this.height, "spark", 1, { speed: 8, up: 6, height: 2, life: 0.4 });
+        this.drawDizzy();
         if (this.timer <= 0) {
           this.body.sprite.x = 0;
+          this.dizzy.clear();
           this.state = "chase";
         }
         break;
@@ -434,6 +437,12 @@ export class Enemy extends Entity implements Hittable {
         this.vy *= Math.pow(0.002, dt);
         if (this.timer <= 0) this.state = "chase";
         break;
+    }
+
+    // Whatever ended the stun, the stars go with it.
+    if (this.state !== "stunned" && this.dizzyShown) {
+      this.dizzy.clear();
+      this.dizzyShown = false;
     }
 
     // Shielded enemies turn slowly: get round the side of them.
@@ -720,6 +729,24 @@ export class Enemy extends Entity implements Hittable {
     this.y = r.y;
   }
 
+  /** Three stars orbiting the head; they fade in the last half-second so
+   * you can see the opening closing. */
+  private dizzyShown = false;
+  private drawDizzy() {
+    this.dizzyShown = true;
+    const g = this.dizzy.clear();
+    const y = -this.height - 3;
+    const a = Math.min(1, this.timer / 0.5);
+    const t = performance.now() / 1000;
+    for (let i = 0; i < 3; i++) {
+      const ang = t * 5 + (i * Math.PI * 2) / 3;
+      const x = Math.round(Math.cos(ang) * 7);
+      const sy = Math.round(y + Math.sin(ang) * 2);
+      const front = Math.sin(ang) > 0;
+      g.rect(x - 1, sy, 3, 1).rect(x, sy - 1, 1, 3).fill({ color: front ? 0xfff2a0 : 0xc8a850, alpha: a });
+    }
+  }
+
   private stun(game: Game, time: number) {
     this.state = "stunned";
     this.timer = time;
@@ -857,6 +884,7 @@ export class Enemy extends Entity implements Hittable {
     this.hp = 0;
     this.hpBar.clear();
     this.tele.clear();
+    this.dizzy.clear();
     this.label?.destroy();
     this.label = null;
     if (this.shieldG) this.shieldG.visible = false;

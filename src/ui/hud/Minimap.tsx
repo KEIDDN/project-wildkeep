@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useDungeonStore } from "../../store/dungeonStore";
 import { isFloor } from "../../game/dungeon/types";
+import { useAvoidPlayer } from "../hooks/useAvoidPlayer";
 
 const CELL = 3;
 const REVEAL = 6;
@@ -13,6 +14,7 @@ const REVEAL = 6;
  */
 export function Minimap() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
   const seen = useRef<{ seed: string | null; cells: Set<number> }>({ seed: null, cells: new Set() });
   const dungeon = useDungeonStore((s) => s.dungeon);
   const playerTile = useDungeonStore((s) => s.playerTile);
@@ -67,9 +69,11 @@ export function Minimap() {
     ctx.fillRect(playerTile.x * CELL, playerTile.y * CELL, CELL, CELL);
   }, [dungeon, playerTile, explored, opened, bossDefeated]);
 
+  // Near a map corner the camera stops and the player can walk under it.
+  const avoid = useAvoidPlayer(boxRef, !!dungeon);
   if (!dungeon) return null;
   return (
-    <div className="minimap">
+    <div className={`minimap${avoid ? " avoid" : ""}`} ref={boxRef}>
       <canvas ref={canvasRef} />
     </div>
   );

@@ -296,6 +296,7 @@ export function buildTavern(_game: Game): Area {
 
   // --- the bar -------------------------------------------------------------------------
   add(npc("greta", 298, 189));
+  area.add(new StaffOnly(0, 0));
   area.add(new InteractSpot(298, 226, () => ({ verb: t("prompt.orderFrom"), target: t("prompt.target.greta") }), () => useUiStore.getState().openPanel("tavern"), { radius: 22, priority: 0 }));
   add(npc("pip", 348, 190, { route: [{ x: 348, y: 190 }, { x: 420, y: 215 }, { x: 492, y: 166 }, { x: 396, y: 278 }, { x: 340, y: 286 }] }));
   add(npc("cook", 110, 120));
@@ -430,6 +431,27 @@ export function buildTavern(_game: Game): Area {
 }
 
 /** Little musical notes drifting up from the bard. */
+/** Greta keeps an eye on her side of the bar: step through the flap and
+ * she says something about it (once per trip, not every frame). */
+class StaffOnly extends Entity {
+  private inside = false;
+  private cooldown = 0;
+  update(dt: number, game: Game): void {
+    this.cooldown -= dt;
+    const p = game.player;
+    // Behind the counter, or anywhere in the kitchen wing.
+    const now = (p.x > 222 && p.x < 330 && p.y > 140 && p.y < 196) || p.x < 170;
+    if (now && !this.inside && this.cooldown <= 0) {
+      const greta = game.area.entities.find((e): e is Npc => e instanceof Npc && e.def?.id === "greta");
+      if (greta) {
+        greta.say(game, t(p.x < 170 ? "npc.staffOnly3" : Math.random() < 0.5 ? "npc.staffOnly1" : "npc.staffOnly2"));
+        this.cooldown = 25;
+      }
+    }
+    this.inside = now;
+  }
+}
+
 class MusicNotes extends Entity {
   private t = 0;
   update(dt: number, game: Game): void {

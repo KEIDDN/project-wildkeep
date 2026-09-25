@@ -58,6 +58,7 @@ import { useSocialStore } from "../store/socialStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { roomAt } from "../game/dungeon/types";
 import { playerEffectiveStats } from "../game/systems/playerStats";
+import { initRumors, recordRumor } from "../game/social/rumors";
 import { removeFromStacks } from "../store/inventoryStore";
 
 /**
@@ -153,6 +154,7 @@ export class Game {
     initFarming();
     initReputation((id) => questDef(id)?.kind ?? null);
     initDrink();
+    initRumors();
 
     const world = useWorldStore.getState();
     const pos = world.position;
@@ -197,6 +199,7 @@ export class Game {
     this.focused = null;
     const area = await buildArea(id, this);
     this.area = area;
+    this.lighting.setVision(area.vision);
     this.world.addChild(area.root);
     this.glowWorld.removeChildren();
     this.glowWorld.addChild(area.glow);
@@ -228,6 +231,7 @@ export class Game {
       if (p.mutator) this.ui.pushToast(t(`dungeon.mutator.${p.mutator}.desc`), "warning");
       if (useWorldStore.getState().recordDungeonFloor(ds.floor) && ds.floor > 1) {
         this.ui.pushToast(t("toast.newDepth", { n: ds.floor }), "levelup");
+        if (ds.floor >= 5) recordRumor("deepDive", { floor: ds.floor });
         this.ui.pushToast(t("toast.depthXp", { xp: grantXp(ds.floor * 12) }), "info");
       }
     } else if (id === "mine") {
@@ -326,7 +330,8 @@ export class Game {
     this.camera.apply(this.glowWorld);
     this.fx.update(dt);
     this.applyAmbient();
-    this.lighting.update(dt, this.camera, this.collectLights());
+    const lights = this.collectLights();
+    this.lighting.update(dt, this.camera, lights);
     this.glowWorld.alpha = this.lighting.night;
     this.weather.active = AREAS[this.area.id].kind === "outdoor" && eventActive("storm");
     this.weather.update(dt, this.camera.screenW, this.camera.screenH);
@@ -501,7 +506,12 @@ export class Game {
       const l = e.light?.();
       if (l) lights.push(l);
     }
-    return lights;
+    const vision = this.area.vision;
+    if (!vision) return lights;
+    // Sight reaches a little past your own light: dim shapes at the edge of
+    // the lantern glow. Torches you haven't discovered stay hidden.
+    vision.update(this.player.x, this.player.y - 6, (base + lantern) / TILE + 4);
+    return lights.filter((l) => vision.seenAt(Math.floor(l.x / TILE), Math.floor((l.y + 8) / TILE)));
   }
 
   // ---------------------------------------------------------------------------
@@ -567,6 +577,8 @@ export class Game {
     this.ui.closePanel();
     this.ui.setFading(true);
     audio.sfx("player_hurt", { pitch: 0.6 });
+    // Everyone will hear about this.
+    recordRumor("passedOut", undefined, "greta");
     await wait(1200);
     if (this.destroyed) return;
     useTimeStore.getState().sleep(false);
@@ -705,17 +717,40 @@ export class Game {
   // Entities & loot
   // ---------------------------------------------------------------------------
 
-  private hitStopUntil = 0;
+  private freezeUntil = 0;
+  private slowUntil = 0;
+  private slowSpeed = 1;
 
-  /** Freeze-frame for a few ms on impact (slows the whole world briefly). */
+  /**
+   * Impact freeze: the world all but stops for a few frames (up to ~90ms),
+   * and anything longer eases out as slow motion. Short, hard stops are what
+   * make a hit land; the old version only slowed things to 20%, which read
+   * as lag rather than impact.
+   */
   hitStop(ms: number): void {
     const now = performance.now();
-    this.hitStopUntil = Math.max(this.hitStopUntil, now + ms);
-    this.app.ticker.speed = 0.2;
-    setTimeout(() => {
-      if (this.destroyed || !this.app?.ticker) return;
-      if (performance.now() >= this.hitStopUntil - 1) this.app.ticker.speed = 1;
-    }, ms);
+    const freeze = Math.min(ms, 90);
+    this.freezeUntil = Math.max(this.freezeUntil, now + freeze);
+    if (ms > freeze) this.slowMo(ms, 0.3);
+    this.applyTimeScale();
+    setTimeout(() => this.applyTimeScale(), freeze + 1);
+  }
+
+  /** A stretch of slow motion (perfect dodges, parries). */
+  slowMo(ms: number, speed: number): void {
+    const now = performance.now();
+    if (now + ms > this.slowUntil) {
+      this.slowUntil = now + ms;
+      this.slowSpeed = speed;
+    }
+    this.applyTimeScale();
+    setTimeout(() => this.applyTimeScale(), ms + 1);
+  }
+
+  private applyTimeScale(): void {
+    if (this.destroyed || !this.app?.ticker) return;
+    const now = performance.now();
+    this.app.ticker.speed = now < this.freezeUntil ? 0.04 : now < this.slowUntil ? this.slowSpeed : 1;
   }
 
   removeEntity(e: Entity): void {

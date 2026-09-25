@@ -10,7 +10,8 @@ interface BarProps {
 export function Bar({ value, max, kind, label, height = 14 }: BarProps) {
   const pct = max <= 0 ? 0 : Math.max(0, Math.min(100, (value / max) * 100));
   return (
-    <div className={`bar bar-${kind}`} style={{ height }}>
+    // A label needs room for the digits font, or it spills over the frame.
+    <div className={`bar bar-${kind}`} style={{ height: label ? Math.max(18, height) : height }}>
       <div className="bar-ghost" style={{ width: `${pct}%` }} />
       <div className="bar-fill" style={{ width: `${pct}%` }} />
       {label && <span className="bar-label">{label}</span>}

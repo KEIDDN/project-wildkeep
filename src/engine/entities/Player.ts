@@ -20,7 +20,7 @@ import { LAST_STAND_COOLDOWN, WHIRLWIND, arrowBonus, dodgeCooldownMult, dodgeRea
 import { gearStamina, weaponProfile } from "../../data/items";
 import { HEAVY, PARRY, PERFECT_DODGE, STAMINA, type WeaponProfile } from "../../data/combat";
 import { isExhausted } from "../../game/systems/vitals";
-import { biteDelay, castLine, landFish, rollFish, type FishDef } from "../../game/fishing";
+import { biteDelay, castLine, fightTuning, landFish, loseFish, rollFish, type FightTuning, type FishDef } from "../../game/fishing";
 import { itemName } from "../../i18n/content";
 import { wearArmorFromHit } from "../../game/systems/durability";
 import { MANA_REGEN, SPARK, maxMana } from "../../game/systems/magic";
@@ -43,6 +43,20 @@ import { RARITY_COLOR } from "../../game/core/types";
  * `free` covers idle / walk / run. Every timed state also has a hard time
  * limit, so a missed animation callback can't leave the player stuck.
  */
+/** State of a fish fight (see game/fishing and ui/hud/FishingMeter). */
+export interface FishFight {
+  tension: number;
+  progress: number;
+  /** Seconds the line has been slack. */
+  slack: number;
+  tune: FightTuning;
+  run: { dir: -1 | 1; warn: number; left: number; age: number } | null;
+  nextRun: number;
+  reeling: boolean;
+  lean: number;
+  snapWarn: number;
+}
+
 export type PlayerState = "free" | "attack" | "charge" | "shoot" | "gather" | "hurt" | "dodge" | "spin" | "parry" | "fish" | "dead";
 
 /** One swing as the combat system sees it. */
@@ -180,7 +194,19 @@ export class Player extends Entity {
   /** Ran dry: no sprinting until stamina is back up a bit. */
   private sprintLocked = false;
   /** Fishing: where the float is, what phase, what's biting. */
-  private fishing: { x: number; y: number; phase: "cast" | "wait" | "bite" | "strike"; timer: number; fish: FishDef | null } | null = null;
+  private fishing: {
+    x: number;
+    y: number;
+    phase: "cast" | "wait" | "bite" | "fight" | "strike";
+    timer: number;
+    fish: FishDef | null;
+    fight: FishFight | null;
+  } | null = null;
+
+  /** The tug in progress, for the HUD meter (null when not fighting a fish). */
+  get fishFight(): Readonly<FishFight> | null {
+    return this.fishing?.phase === "fight" ? this.fishing.fight : null;
+  }
   private bobber = new Graphics();
 
   constructor(x: number, y: number) {
@@ -590,9 +616,12 @@ export class Player extends Entity {
         break;
       }
 
-      case "fish":
-        this.updateFishing(game, dt, wantsMove || wantsDodge || this.frozen === false && game.input.pressed("attack"));
+      case "fish": {
+        // Mid-fight the direction keys are for leaning, and dodge lets go.
+        const fighting = this.fishing?.phase === "fight";
+        this.updateFishing(game, dt, fighting ? wantsDodge : wantsMove || wantsDodge || (this.frozen === false && game.input.pressed("attack")));
         break;
+      }
 
       case "parry": {
         const win = PARRY.window * parryWindowMult(usePlayerStore.getState().talents);
@@ -898,8 +927,10 @@ export class Player extends Entity {
     game.fx.burst(mx, my, "spark", 18, { speed: 90, up: 50, life: 0.35 });
     game.fx.ring(mx, my, 16, 0xfff0b0, 0.25);
     game.fx.text(this.x, this.y - 38, t("combat.parried"), 0xfff0b0, { size: 10, bold: true, life: 1 });
-    game.hitStop(150);
-    game.shake(2, 0.12);
+    // Clang: a hard stop, then a beat of slow motion to see the opening.
+    game.hitStop(80);
+    game.slowMo(320, 0.4);
+    game.shake(2.5, 0.14);
     audio.sfx("hit", { pitch: 1.9 });
     audio.sfx("rare", { pitch: 1.6 });
     awardSkillXp("defense", 3);
@@ -922,7 +953,7 @@ export class Player extends Entity {
       this.stamina = Math.min(this.maxStamina, this.stamina + PERFECT_DODGE.refund);
       game.fx.text(this.x, this.y - 36, t("combat.perfect"), 0x9fe8ff, { size: 9, bold: true, life: 1 });
       game.fx.ring(this.x, this.y - 10, 20, 0x9fe8ff, 0.3);
-      game.hitStop(PERFECT_DODGE.slowMo * 1000);
+      game.slowMo(PERFECT_DODGE.slowMo * 1000, 0.3);
       audio.sfx("rare", { pitch: 1.4 });
     }
     const f = axis.x !== 0 || axis.y !== 0 ? axis : this.facingVector();
@@ -972,7 +1003,7 @@ export class Player extends Entity {
     if (this.state !== "free") return;
     this.faceToward(x, y);
     castLine();
-    this.fishing = { x, y, phase: "cast", timer: 0.45, fish: null };
+    this.fishing = { x, y, phase: "cast", timer: 0.45, fish: null, fight: null };
     this.setState("fish");
     this.syncAnim(true);
     audio.sfx("swing", { pitch: 0.8 });
@@ -984,23 +1015,18 @@ export class Player extends Entity {
     const f = this.fishing;
     if (this.state !== "fish" || !f) return false;
     if (f.phase === "bite" && f.fish) {
-      f.phase = "strike";
-      f.timer = 0.5;
-      this.body.hold(7);
-      const res = landFish(f.fish);
-      if (res.escaped) {
-        game.fx.text(this.x, this.y - 36, t("fish.snapped"), 0xffa080, { size: 8, bold: true });
-        audio.sfx("deny");
-      } else {
-        const def = getItem(res.itemId);
-        game.fx.text(this.x, this.y - 36, `+1 ${itemName(res.itemId)}`, def.rarity === "common" ? 0xf5ecd6 : Number.parseInt(RARITY_COLOR[def.rarity].slice(1), 16), { size: 8, bold: true, life: 1.2 });
-        game.fx.burst(f.x, f.y - 2, "crystal", 12, { speed: 40, up: 50 });
-        if (def.rarity !== "common") game.ui.pushLootReveal(res.itemId, 1);
-        else game.ui.pushItemToast(res.itemId, itemName(res.itemId), 1, def.icon, def.rarity);
-        audio.sfx(def.rarity === "common" ? "pickup" : "rare");
-      }
+      // Hooked: now play it.
+      const tune = fightTuning(f.fish);
+      f.phase = "fight";
+      f.fight = { tension: 48, progress: 0, slack: 0, tune, run: null, nextRun: 1 + Math.random() * tune.gap, reeling: false, lean: 0, snapWarn: 0 };
+      this.body.hold(6);
+      game.fx.burst(f.x, f.y, "crystal", 10, { speed: 40, up: 30, life: 0.4 });
+      game.shake(1.5, 0.1);
+      audio.sfx("hit", { pitch: 1.5 });
+      if (tune.underRodded) game.fx.text(this.x, this.y - 36, t("fish.heavy"), 0xffc080, { size: 7, bold: true, life: 1.4 });
       return true;
     }
+    if (f.phase === "fight") return true;
     if (f.phase === "wait" || f.phase === "cast") {
       // Too eager: reel in an empty hook.
       game.fx.text(this.x, this.y - 34, t("fish.tooEarly"), 0xc8c0b0, { size: 7 });
@@ -1013,14 +1039,28 @@ export class Player extends Entity {
   private updateFishing(game: Game, dt: number, cancel: boolean) {
     const f = this.fishing;
     if (!f) return this.setState("free");
-    if (cancel && f.phase !== "strike") return this.endFishing();
+    if (cancel && f.phase !== "strike") {
+      if (f.phase === "fight") {
+        loseFish();
+        game.fx.text(this.x, this.y - 34, t("fish.letGo"), 0xc8c0b0, { size: 7 });
+      }
+      return this.endFishing();
+    }
     f.timer -= dt;
     // The float, drawn relative to you.
     const b = this.bobber;
     b.visible = f.phase !== "cast" || f.timer < 0.15;
-    const bob = f.phase === "bite" ? Math.sin(performance.now() / 40) * 1.5 + 1 : Math.sin(performance.now() / 400) * 0.6;
+    const fightRun = f.phase === "fight" ? f.fight?.run : null;
+    const bob =
+      f.phase === "bite"
+        ? Math.sin(performance.now() / 40) * 1.5 + 1
+        : f.phase === "fight"
+          ? Math.sin(performance.now() / (fightRun && fightRun.warn <= 0 ? 25 : 90)) * (fightRun ? 2 : 1) + 1
+          : Math.sin(performance.now() / 400) * 0.6;
     b.clear();
-    b.position.set(Math.round(f.x - this.x), Math.round(f.y - this.y + bob));
+    // During a run the float is dragged off to the side.
+    const drag = fightRun && fightRun.warn <= 0 ? fightRun.dir * Math.min(6, (fightRun.age ?? 0) * 12) : 0;
+    b.position.set(Math.round(f.x - this.x + drag), Math.round(f.y - this.y + bob));
     b.ellipse(0, 1, 4, 1.5).stroke({ width: 1, color: 0xffffff, alpha: 0.35 });
     b.rect(-1, -2, 2, 2).fill(0xe0453a).rect(-1, 0, 2, 1).fill(0xffffff);
     switch (f.phase) {
@@ -1054,9 +1094,91 @@ export class Player extends Entity {
           this.endFishing();
         }
         break;
+      case "fight":
+        this.updateFight(game, dt);
+        break;
       case "strike":
         if (f.timer <= 0) this.endFishing();
         break;
+    }
+  }
+
+  /** One frame of the tug (see game/fishing for the rules). */
+  private updateFight(game: Game, dt: number) {
+    const f = this.fishing!;
+    const x = f.fight!;
+    const fish = f.fish!;
+    const tune = x.tune;
+    const input = game.input;
+    x.reeling = input.held("interact");
+    x.lean = (input.held("moveRight") ? 1 : 0) - (input.held("moveLeft") ? 1 : 0);
+
+    // Runs: a short warning (splash, arrow), then the fish hauls on the line.
+    x.nextRun -= dt;
+    if (!x.run && x.nextRun <= 0 && tune.pull > 0) {
+      x.run = { dir: Math.random() < 0.5 ? -1 : 1, warn: 0.45, left: 0.7 + Math.random() * 0.7, age: 0 };
+      game.fx.burst(f.x, f.y, "crystal", 6, { speed: 30, up: 24, life: 0.35 });
+      audio.sfx("potion", { pitch: 0.9 });
+    }
+    let pull = 0;
+    if (x.run) {
+      const r = x.run;
+      if (r.warn > 0) r.warn -= dt;
+      else {
+        r.left -= dt;
+        r.age += dt;
+        // Leaning the other way takes half the strain.
+        pull = tune.pull * (x.lean === -r.dir ? 0.5 : 1);
+        if (Math.random() < dt * 10) game.fx.burst(f.x + r.dir * 4, f.y, "crystal", 1, { speed: 20, up: 10, life: 0.3 });
+        if (r.left <= 0) {
+          x.run = null;
+          x.nextRun = tune.gap * (0.6 + Math.random() * 0.8);
+        }
+      }
+    }
+    x.tension += ((x.reeling ? 50 : -38) + pull) * dt;
+    x.tension = Math.max(0, x.tension);
+
+    const inZone = x.tension >= tune.lo && x.tension <= tune.hi;
+    // Reeling in the zone lands it; a taut line at rest still gains a little.
+    if (inZone) x.progress += tune.reel * (x.reeling ? 1 : 0.45) * dt;
+    else if (pull > 0) x.progress -= 9 * dt;
+    else x.progress -= 2.5 * dt;
+    x.progress = Math.max(0, x.progress);
+
+    // Reel animation: crank while reeling, strain during runs.
+    this.body.hold(x.reeling ? (Math.floor(performance.now() / 110) % 2 ? 6 : 7) : 5);
+    x.snapWarn = x.tension > 88 ? x.snapWarn + dt : 0;
+    if (x.tension > 88 && Math.random() < dt * 8) game.shake(0.8, 0.05);
+
+    if (x.tension >= 100) {
+      loseFish();
+      game.fx.text(this.x, this.y - 36, t("fish.snappedLine"), 0xffa080, { size: 8, bold: true });
+      game.fx.burst(f.x, f.y, "crystal", 8, { speed: 50, up: 30 });
+      audio.sfx("deny");
+      audio.sfx("hit", { pitch: 0.6 });
+      return this.endFishing();
+    }
+    x.slack = x.tension <= 4 ? x.slack + dt : 0;
+    if (x.slack > 1.3) {
+      loseFish();
+      game.fx.text(this.x, this.y - 34, t("fish.slipped"), 0xc8c0b0, { size: 7 });
+      audio.sfx("deny");
+      return this.endFishing();
+    }
+    if (x.progress >= 100) {
+      f.phase = "strike";
+      f.timer = 0.6;
+      this.body.hold(7);
+      const res = landFish(fish);
+      const def = getItem(res.itemId);
+      game.fx.text(this.x, this.y - 36, `+1 ${itemName(res.itemId)}`, def.rarity === "common" ? 0xf5ecd6 : Number.parseInt(RARITY_COLOR[def.rarity].slice(1), 16), { size: 8, bold: true, life: 1.2 });
+      game.fx.burst(f.x, f.y - 2, "crystal", 16, { speed: 50, up: 60 });
+      game.fx.ring(f.x, f.y, 12, 0xbfe8ff, 0.3);
+      game.shake(1.5, 0.1);
+      if (def.rarity !== "common") game.ui.pushLootReveal(res.itemId, 1);
+      else game.ui.pushItemToast(res.itemId, itemName(res.itemId), 1, def.icon, def.rarity);
+      audio.sfx(def.rarity === "common" ? "pickup" : "rare");
     }
   }
 

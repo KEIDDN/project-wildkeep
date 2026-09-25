@@ -22,10 +22,13 @@ import { MYSTERY_BOX_LOOT } from "../data/worldEvents";
 import { CRAFT_GOLD_MULT } from "../data/shops";
 import { hasPerk } from "./relationships";
 import { itemName, skillName, houseName } from "../i18n/content";
-import { t } from "../i18n";
+import { t, tl } from "../i18n";
 import { restoreEnergy } from "./systems/vitals";
 import { fieldRepair, repairables } from "./systems/durability";
 import { FENCE_RATE } from "./social/reputation";
+import { soberUp } from "./tavern/drink";
+import { recordRumor } from "./social/rumors";
+import { Npc } from "../engine/entities/Props";
 import { artisanGold, fenceRate, hagglerBuy, hagglerSell, healMult, xpMult } from "../data/talents";
 
 /**
@@ -126,7 +129,33 @@ export function consumeFood(itemId: string): number {
   }
   if (game && healed > 0) game.fx.text(game.player.x, game.player.y - 30, `+${healed}`, 0x7dff7d, { size: 9, bold: true });
   if (game && energy > 0) game.fx.text(game.player.x, game.player.y - 40, t("energy.restored", { n: Math.round(energy) }), 0xffe08a, { size: 7 });
+  if (itemId === "firepepper") firepepperDare();
   return healed;
+}
+
+/**
+ * Eating a firepepper raw: a dare, not a meal. It sobers you right up and
+ * fills your stamina, costs a little skin (never your life), and if anyone
+ * saw it, the whole village will hear about it by tomorrow.
+ */
+function firepepperDare(): void {
+  soberUp(40);
+  const p = usePlayerStore.getState();
+  usePlayerStore.setState({ hp: Math.max(1, p.hp - 3) });
+  const game = getGame();
+  if (!game) return;
+  const pl = game.player;
+  pl.stamina = pl.maxStamina;
+  game.fx.text(pl.x, pl.y - 48, t("npc.pepperSelf"), 0xff6a3a, { size: 10, bold: true, life: 1.2 });
+  const f = pl.facingVector();
+  for (let i = 0; i < 3; i++) setTimeout(() => game.fx.burst(pl.x + f.x * 10, pl.y - 18, "spark", 10, { speed: 70, up: 20, life: 0.35 }), i * 120);
+  game.shake(2, 0.3);
+  audio.sfx("hit", { pitch: 0.7 });
+  // An audience makes it a story.
+  const watchers = game.area.entities.filter((e): e is Npc => e instanceof Npc && !!e.def && Math.hypot(e.x - pl.x, e.y - pl.y) < 110);
+  const lines = tl("npc.pepperReact");
+  watchers.slice(0, 3).forEach((n, i) => setTimeout(() => !n.removed && n.say(game, lines[(i + Math.floor(Math.random() * lines.length)) % lines.length], 2.4), 400 + i * 500));
+  if (watchers.length >= 2 || game.area.id === "tavern") recordRumor("firepepper");
 }
 
 /**

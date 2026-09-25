@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { getItem } from "../data/items";
 import type { InventoryStack } from "../game/save/schema";
 import { useWorldStore } from "./worldStore";
+import { bagLayout, canMerge, pinSlots, sortStacks, type SortMode } from "../game/inventoryLayout";
 
 /** Which copies a removal may take: any, only honest ones, or only stolen. */
 export type StolenFilter = "any" | "clean" | "stolen";
@@ -16,6 +17,12 @@ interface InventoryState {
   quantityOf: (itemId: string, filter?: StolenFilter) => number;
   hasItem: (itemId: string, quantity?: number) => boolean;
   loadFrom: (stacks: InventoryStack[]) => void;
+  /** Drag a stack to a bag slot: moves, swaps with what's there, or tops up
+   * a matching stack. Returns what happened. */
+  moveToSlot: (index: number, slot: number) => "moved" | "swapped" | "merged" | "none";
+  /** Half of a stack into the first free slot. */
+  splitStack: (index: number) => boolean;
+  sortBag: (mode?: SortMode) => void;
 }
 
 const matches = (s: InventoryStack, itemId: string, filter: StolenFilter) =>
@@ -110,4 +117,63 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   hasItem: (itemId, quantity = 1) => get().quantityOf(itemId) >= quantity,
 
   loadFrom: (stacks) => set({ stacks: [...stacks] }),
+
+  moveToSlot: (index, slot) => {
+    const stacks = pinSlots(get().stacks);
+    const src = stacks[index];
+    if (!src || src.slot === slot || slot < 0) return "none";
+    const j = stacks.findIndex((s) => s.slot === slot);
+    if (j < 0) {
+      src.slot = slot;
+      set({ stacks });
+      return "moved";
+    }
+    const dst = stacks[j];
+    if (canMerge(src, dst)) {
+      const room = getItem(dst.itemId).maxStack - dst.quantity;
+      if (room > 0) {
+        const n = Math.min(room, src.quantity);
+        dst.quantity += n;
+        src.quantity -= n;
+        set({ stacks: src.quantity > 0 ? stacks : stacks.filter((_, i) => i !== index) });
+        return "merged";
+      }
+    }
+    dst.slot = src.slot;
+    src.slot = slot;
+    set({ stacks });
+    return "swapped";
+  },
+
+  splitStack: (index) => {
+    const stacks = pinSlots(get().stacks);
+    const src = stacks[index];
+    if (!src || src.quantity < 2 || !getItem(src.itemId).stackable) return false;
+    const half = Math.floor(src.quantity / 2);
+    src.quantity -= half;
+    const grid = bagLayout(stacks);
+    const free = grid.indexOf(-1);
+    stacks.push({ itemId: src.itemId, quantity: half, ...(src.stolen ? { stolen: true } : {}), slot: free >= 0 ? free : grid.length });
+    set({ stacks });
+    return true;
+  },
+
+  // Tidy: identical stacks fold together, then everything is laid out in order.
+  sortBag: (mode = "type") => {
+    const folded: InventoryStack[] = [];
+    for (const s of get().stacks) {
+      const { slot: _slot, ...rest } = s;
+      void _slot;
+      let left = rest.quantity;
+      for (const f of folded) {
+        if (left <= 0) break;
+        if (!canMerge(f, rest)) continue;
+        const n = Math.min(getItem(f.itemId).maxStack - f.quantity, left);
+        f.quantity += n;
+        left -= n;
+      }
+      if (left > 0) folded.push({ ...rest, quantity: left });
+    }
+    set({ stacks: sortStacks(folded, mode).map((s, i) => ({ ...s, slot: i })) });
+  },
 }));

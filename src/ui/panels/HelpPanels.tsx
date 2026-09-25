@@ -1,5 +1,5 @@
 import { eventIs, keyLabel } from "../../game/input/bindings";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTutorialStore } from "../../store/tutorialStore";
 import { useUiStore } from "../../store/uiStore";
 import { HELP_TOPICS, HELP_TOPIC_ORDER, type HelpTopicId } from "../../data/tutorial";
@@ -50,7 +50,9 @@ export function TipCard() {
   const topic = useTutorialStore((s) => s.queue[0]);
   const blocking = useUiStore((s) => s.activePanel === "intro" || s.activePanel === "dialogue");
   const ref = useRef<HTMLDivElement>(null);
-  const avoid = useAvoidPlayer(ref, !!topic && !blocking);
+  const panelOpen = useUiStore((s) => !!s.activePanel);
+  const avoid = useAvoidPlayer(ref, !!topic && !blocking && !panelOpen);
+  const dock = usePanelGutter(!!topic && panelOpen && !blocking);
   useEffect(() => {
     if (!topic) return;
     audio.sfx("ui");
@@ -58,8 +60,11 @@ export function TipCard() {
     return () => clearTimeout(tm);
   }, [topic]);
   if (!topic || blocking) return null;
+  // A window is open and there's no room beside it: wait until it closes
+  // rather than sit on top of it.
+  if (panelOpen && !dock) return null;
   return (
-    <div ref={ref} className={`tip-card${avoid ? " avoid" : ""}`} key={topic}>
+    <div ref={ref} className={`tip-card${avoid ? " avoid" : ""}${dock ? " docked" : ""}`} key={topic} style={dock ?? undefined}>
       <div className="tip-head">
         <img src={`/icons/${HELP_TOPICS[topic].icon}.png`} alt="" />
         <b>{topicTitle(topic)}</b>
@@ -72,6 +77,34 @@ export function TipCard() {
       </button>
     </div>
   );
+}
+
+const TIP_MIN_W = 210;
+
+/** Where a tip card fits beside the open window (the wider free gutter), or
+ * null when the window leaves no room. Polled, like useAvoidPlayer. */
+function usePanelGutter(enabled: boolean): CSSProperties | null {
+  const [dock, setDock] = useState<CSSProperties | null>(null);
+  useEffect(() => {
+    if (!enabled) {
+      setDock(null);
+      return;
+    }
+    const check = () => {
+      const el = document.querySelector(".panel");
+      if (!el) return setDock(null);
+      const r = el.getBoundingClientRect();
+      const right = window.innerWidth - r.right - 24;
+      const left = r.left - 24;
+      const room = Math.max(left, right);
+      const next: CSSProperties | null = room < TIP_MIN_W ? null : right >= left ? { right: 12, left: "auto", width: Math.min(300, right) } : { left: 12, right: "auto", width: Math.min(300, left) };
+      setDock((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+    };
+    check();
+    const id = setInterval(check, 200);
+    return () => clearInterval(id);
+  }, [enabled]);
+  return dock;
 }
 
 /** A few lines of story when a new game begins. Opens itself on a fresh save. */

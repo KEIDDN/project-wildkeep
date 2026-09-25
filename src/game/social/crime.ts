@@ -13,6 +13,8 @@ import { caughtLine } from "../npcs";
 import { itemName } from "../../i18n/content";
 import { t, type TKey } from "../../i18n";
 import { Npc, setNpcHitHandler } from "../../engine/entities/Props";
+import { recordRumor } from "./rumors";
+import { npcName } from "../../i18n/content";
 import type { Game } from "../../engine/Game";
 
 /**
@@ -92,5 +94,8 @@ setNpcHitHandler((npc) => {
   useSocialStore.getState().addDeed("npcsHit");
   adjustHonor(-2);
   adjustRep("watch", -2, true);
-  if (npc.def) changeFriendship(npc.def.id, -3, true);
+  if (npc.def) {
+    changeFriendship(npc.def.id, -3, true);
+    recordRumor("hitNpc", { name: npcName(npc.def) }, npc.def.id);
+  }
 });

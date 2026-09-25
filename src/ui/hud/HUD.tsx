@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { FishingMeter } from "./FishingMeter";
 import { getGame } from "../../engine/gameInstance";
 import { rank, talentPoints } from "../../data/talents";
 import { usePlayerStore } from "../../store/playerStore";
@@ -59,6 +60,14 @@ export function HUD() {
         ? t("hud.mineArea", { floor: mineFloor })
         : areaName(area);
   const lowHp = hp / stats.maxHp < 0.3;
+  // A red edge flash each time you lose health (remounted to replay).
+  const prevHp = useRef(hp);
+  const [hurt, setHurt] = useState<{ n: number; heavy: boolean }>({ n: 0, heavy: false });
+  useEffect(() => {
+    const lost = prevHp.current - hp;
+    prevHp.current = hp;
+    if (lost > 0) setHurt((h) => ({ n: h.n + 1, heavy: lost >= stats.maxHp * 0.2 }));
+  }, [hp, stats.maxHp]);
   const portrait = equipment.armor ? getItem(equipment.armor).icon : "armor_cloth";
 
   return (
@@ -128,7 +137,9 @@ export function HUD() {
         <MenuSlot panel="map" icon="map_scroll" action="map" />
       </div>
 
+      <FishingMeter />
       {lowHp && hp > 0 && <div className="hud-lowhp" />}
+      {hurt.n > 0 && <div key={hurt.n} className={`hud-hurt${hurt.heavy ? " heavy" : ""}`} />}
       <TutorialTracker />
       <QuestTracker />
       <InteractionPrompt />

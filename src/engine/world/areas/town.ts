@@ -10,7 +10,8 @@ import { TILE } from "../../../game/core/constants";
 import { ASSETS } from "../../../data/assets";
 import { InteractSpot, Prop, npc } from "../../entities/Props";
 import { animFrames, tex } from "../../textures";
-import { buildingPath } from "../../../data/assets";
+import { Container, Graphics, Rectangle, Sprite, type Texture } from "pixi.js";
+import { buildingPath, propPath } from "../../../data/assets";
 import { useUiStore } from "../../../store/uiStore";
 import { houseLevelInfo } from "../../../data/house";
 import { houseName } from "../../../i18n/content";
@@ -78,6 +79,71 @@ const COLS = 64;
 const ROWS = 68;
 const STREET_Y = 17; // first street row (buildings sit right above it)
 
+/**
+ * The garden fence: a post every tile with a rail to the next one, gates
+ * (gaps) top and bottom on the middle walk. The pack's rail sprite has
+ * uneven post spacing, so one tile's worth is baked from the post sprite.
+ */
+let fenceTex: Texture | null = null;
+function gardenFence(o: Outdoor, game: Game) {
+  if (!fenceTex) {
+    const c = new Container();
+    const post = new Sprite(tex(propPath("fence_post")));
+    const rail = new Graphics()
+      .rect(7, 11, 10, 1)
+      .fill(0x3a2418)
+      .rect(7, 12, 10, 1)
+      .fill(0x9a6a3a)
+      .rect(7, 13, 10, 1)
+      .fill(0x6a4424)
+      .rect(7, 14, 10, 1)
+      .fill(0x3a2418);
+    c.addChild(rail, post);
+    fenceTex = game.app.renderer.generateTexture({ target: c, frame: new Rectangle(0, 0, 16, 23), resolution: 1, antialias: false });
+    fenceTex.source.scaleMode = "nearest";
+  }
+  const area = o.area;
+  const piece = (tx: number, ty: number, railed: boolean) => {
+    // Posts sit in the middle of their tile (like the side posts); a railed
+    // piece is 16px wide with the post at its left, so centre it 4px right.
+    const x = tx * TILE + 4;
+    const y = ty * TILE + TILE - 1;
+    area.add(new Prop(railed ? x + 8 : x + 4, y, railed ? fenceTex! : tex(propPath("fence_post"))));
+    area.collision.addRect({ x, y: y - 4, w: railed ? 16 : 8, h: 4 });
+  };
+  for (const row of [21, 28])
+    for (let x = 3; x <= 13; x++) {
+      if (x === 8) continue;
+      // The post before a gate carries no rail across the gap.
+      piece(x, row, x !== 7 && x !== 13);
+    }
+  // Side fences: posts down both sides (rails would face the camera edge-on).
+  for (let y = 22; y <= 27; y++) {
+    o.prop("fence_post", 3, y, { w: 6, h: 4 });
+    o.prop("fence_post", 13, y, { w: 6, h: 4 });
+  }
+}
+
+/** Little signs of a working garden, more as your home grows. */
+function dressGarden(o: Outdoor, houseLevel: number) {
+  const flowers = ["flower_yellow", "flower_red", "flower_white", "flower_blue"];
+  // A flower border along the street side, and a few in front of the bottom fence.
+  for (let x = 3; x <= 13; x++) if (x !== 8 && x % 2 === 1) o.prop(flowers[(x >> 1) % flowers.length], x, 20, undefined, { flat: true, dy: -2 });
+  o.prop("d_sacks", 14, 22, { w: 14, h: 6 });
+  if (houseLevel >= 2) {
+    o.prop("d_hay_a", 14, 27, { w: 12, h: 6 });
+    for (let x = 4; x <= 12; x += 4) o.prop(flowers[(x >> 2) % flowers.length], x, 29, undefined, { flat: true, dy: -3 });
+  }
+  if (houseLevel >= 3) {
+    o.prop("d_log_stack", 2, 23, { w: 14, h: 6 });
+    o.prop("d_hay_b", 15, 27, { w: 12, h: 6 });
+  }
+  if (houseLevel >= 4) {
+    o.prop("d_washtub", 2, 26, { w: 22, h: 8 });
+    o.prop("crates", 15, 23, { w: 40, h: 8 });
+  }
+}
+
 export function buildTown(game: Game): Area {
   const o = new Outdoor(game, "town", COLS, ROWS, "wildkeep-town");
   const ter = o.terrain;
@@ -91,6 +157,9 @@ export function buildTown(game: Game): Area {
   ter.path([[29, 28], [29, 36], [9, 36]], 3, "dirt"); // south lane to the barrow
   ter.path([[29, 36], [29, ROWS - 1]], 3, "dirt"); // on south to Mirror Lake
   ter.rect(4, 22, 9, 6, "dirt"); // garden soil
+  // Garden walks: in through the gates, down the middle, across between beds.
+  ter.rect(8, 20, 1, 10, "cobble");
+  ter.rect(4, 24, 9, 1, "cobble");
   ter.blob(50, 32, 5, 3, "dirt", R);
   ter.smooth();
 
@@ -241,8 +310,9 @@ export function buildTown(game: Game): Area {
   area.prop("rock_grey_medium", barrowLeft + barrowMeta.w + 8, barrowBottom - 4, { collider: { w: 20, h: 8 } });
   area.prop("tomb_wood", 5 * TILE, 33 * TILE, { collider: { w: 10, h: 5 } });
   area.prop("tomb_wood", 13 * TILE + 4, 32 * TILE + 6, { collider: { w: 10, h: 5 } });
-  o.tree("tree_oak_dead", 7, 29, false);
-  o.tree("tree_pine_dark", 11, 29, false);
+  // (Kept off to the sides: at row 29 they towered over the garden plots.)
+  o.tree("tree_oak_dead", 17, 31, false);
+  o.tree("tree_pine_small", 1, 34, false);
   area.light({ x: barrowDoorX, y: barrowBottom - 14, radius: 30, color: 0x9ab8ff, intensity: 0.6, flicker: 0.5 });
   addNpc(area, npc("tobin", 14 * TILE, 35 * TILE + 8, { facingLeft: true }));
 
@@ -256,11 +326,11 @@ export function buildTown(game: Game): Area {
   // The garden's water barrel: refill the watering can here.
   area.prop("barrel_water", 14 * TILE + 8, 25 * TILE + 4, { collider: { w: 12, h: 6 } });
   waterSpot(area, 14 * TILE + 8, 25 * TILE + 8);
-  for (let x = 3; x <= 13; x++) {
-    if (x === 8) continue;
-    o.prop("fence_post", x, 21, { w: 6, h: 4 });
-    o.prop("fence_post", x, 28, { w: 6, h: 4 });
-  }
+  gardenFence(o, game);
+  dressGarden(o, currentHouseLevel());
+  // Nothing tall grows right up against the beds (trees south of them
+  // used to stand in front of the bottom row).
+  o.reserve(1, 20, 16, 12);
   o.node("tree", 16, 25);
   o.node("tree", 19, 30);
   o.node("rock", 15, 32);
@@ -348,7 +418,7 @@ export function buildTown(game: Game): Area {
   o.forestWall(COLS - 2, STREET_Y + 3, 2, ROWS - STREET_Y - 3, ["tree_pine", "tree_oak"]);
   for (const [x, y] of [
     [44, 31],
-    [3, 34],
+    [3, 38],
     [24, 41],
     [45, 38],
   ])

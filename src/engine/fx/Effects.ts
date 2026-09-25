@@ -95,6 +95,7 @@ export class Effects {
   private ghosts: Ghost[] = [];
   private bubbles: Bubble[] = [];
   private twinkles: { g: Graphics; life: number; maxLife: number }[] = [];
+  private flyers: { s: Sprite; x0: number; y0: number; to: () => { x: number; y: number }; life: number; maxLife: number; onArrive?: () => void }[] = [];
 
   burst(x: number, y: number, palette: FxPalette, count: number, opts: { speed?: number; up?: number; height?: number; life?: number; size?: number } = {}): void {
     const colors = PALETTES[palette];
@@ -216,6 +217,14 @@ export class Effects {
     this.twinkles.push({ g, life: 0, maxLife: 0.6 });
   }
 
+  /** A sprite that hops up out of (x, y) and arcs into a moving target
+   * (harvested crops into your arms). */
+  fly(s: Sprite, x: number, y: number, to: () => { x: number; y: number }, life = 0.45, onArrive?: () => void): void {
+    s.position.set(x, y);
+    this.layer.addChild(s);
+    this.flyers.push({ s, x0: x, y0: y, to, life: 0, maxLife: life, onArrive });
+  }
+
   /** A fading copy of a sprite (dodge afterimages). */
   ghost(s: Sprite, life: number): void {
     this.layer.addChild(s);
@@ -247,6 +256,22 @@ export class Effects {
   }
 
   update(dt: number): void {
+    for (let i = this.flyers.length - 1; i >= 0; i--) {
+      const f = this.flyers[i];
+      f.life += dt;
+      const k = Math.min(1, f.life / f.maxLife);
+      const tgt = f.to();
+      // Quick pop upward, then an eased arc into the target.
+      const e = k * k * (3 - 2 * k);
+      const lift = Math.sin(k * Math.PI) * 18;
+      f.s.position.set(Math.round(f.x0 + (tgt.x - f.x0) * e), Math.round(f.y0 + (tgt.y - f.y0) * e - lift));
+      f.s.scale.set(k < 0.2 ? 0.6 + k * 2 : 1 - Math.max(0, k - 0.75) * 2);
+      if (k >= 1) {
+        f.s.destroy();
+        this.flyers.splice(i, 1);
+        f.onArrive?.();
+      }
+    }
     for (let i = this.slashes.length - 1; i >= 0; i--) {
       const sl = this.slashes[i];
       sl.life += dt;
@@ -348,5 +373,6 @@ export class Effects {
     this.ghosts = [];
     this.bubbles = [];
     this.twinkles = [];
+    this.flyers = [];
   }
 }

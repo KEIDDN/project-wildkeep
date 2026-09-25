@@ -112,7 +112,7 @@ export function ShopPanel() {
       : stock === "travelling"
         ? t("worldEvent.merchant.title")
         : t("worldEvent.stranger.title");
-  const subtitle = fence ? t("rep.fence.subtitle") : spec ? t(stock === "hunter" ? "shop.hunterSubtitle" : "shop.anglerSubtitle") : merchant ? t("shop.merchantToday") : stock === "general" ? t("shop.subtitle") : stock === "travelling" ? t("worldEvent.merchant.desc") : t("worldEvent.stranger.desc");
+  const subtitle = fence ? t("rep.fence.subtitle") : spec ? t(stock === "hunter" ? "shop.hunterSubtitle" : stock === "kitchen" ? "shop.kitchenSubtitle" : "shop.anglerSubtitle") : merchant ? t("shop.merchantToday") : stock === "general" ? t("shop.subtitle") : stock === "travelling" ? t("worldEvent.merchant.desc") : t("worldEvent.stranger.desc");
 
   return (
     <Panel title={title} subtitle={subtitle} icon="coin_bag" width={660}>

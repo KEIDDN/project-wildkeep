@@ -10,6 +10,8 @@ export interface InventoryStack {
   stolen?: boolean;
   /** Durability of a carried piece of gear (missing = like new). */
   dur?: number;
+  /** Bag grid position you dragged it to (missing = first free slot). */
+  slot?: number;
 }
 
 export interface EquipmentSaveState {
@@ -110,6 +112,8 @@ export interface SocialSaveState {
   bounty: number;
   /** Tipsiness 0..100 (the tavern; wears off). */
   drunk: number;
+  /** What the town's been saying about you lately (v0.8; see game/social/rumors). */
+  rumors?: { kind: string; day: number; p?: Record<string, string | number>; about?: string }[];
 }
 
 /** Your garden plots, keyed "tx,ty" (see game/farming.ts). */

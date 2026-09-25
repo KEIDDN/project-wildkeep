@@ -117,6 +117,7 @@ function migrate(data: any): SaveData {
       used: { ...data.social.used },
       event: { ...d.social.event, ...data.social.event },
       rep: { ...d.social.rep, ...data.social.rep },
+      rumors: Array.isArray(data.social.rumors) ? data.social.rumors.filter((r: { kind?: unknown; day?: unknown } | null) => r && typeof r.kind === "string" && typeof r.day === "number").slice(0, 10) : [],
     };
   }
   // v5: quests.
@@ -169,5 +170,6 @@ function sanitizeStacks(stacks: InventoryStack[]): InventoryStack[] {
       quantity: s.quantity,
       ...(s.stolen ? { stolen: true } : {}),
       ...(typeof s.dur === "number" ? { dur: s.dur } : {}),
+      ...(typeof s.slot === "number" && s.slot >= 0 ? { slot: Math.floor(s.slot) } : {}),
     }));
 }

@@ -42,6 +42,17 @@ export const SPECIALISTS = {
     buys: ["fish_minnow", "fish_perch", "fish_carp", "fish_trout", "fish_salmon", "fish_pike", "fish_rainbow", "fish_moon", "fish_golden"],
     rate: 1.3,
   },
+  // Greta's kitchen: garden produce and wild herbs, better than Mira pays
+  // (the grapes go in "the good barrel").
+  kitchen: {
+    npc: "greta",
+    stock: [
+      { itemId: "vegetable_stew", price: 38 },
+      { itemId: "forest_stew", price: 24 },
+    ],
+    buys: ["turnip", "carrot", "potato", "strawberry", "tomato", "corn", "pumpkin", "melon", "onion", "cabbage", "firepepper", "duskberry", "grapes", "herb", "mushroom", "healroot", "moonroot"],
+    rate: 1.3,
+  },
 } as const;
 
 export type SpecialistId = keyof typeof SPECIALISTS;

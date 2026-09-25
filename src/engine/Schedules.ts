@@ -31,13 +31,19 @@ export function scheduleSpot(def: NpcDef, period: TimeOfDay): string | null {
 
 const scheduled = () => Object.values(NPCS).filter((d) => d.schedule);
 
+/** How far people wander around a spot. Spots on a narrow walk (the
+ * garden's cross-path) keep them on it instead of trampling the beds. */
+const MILL: Record<string, { x: number; y: number }> = { garden: { x: 56, y: 0 } };
+const millRange = (spot: string) => MILL[spot] ?? { x: 28, y: 11 };
+
 /** A little loop around a spot so people mill about instead of standing. */
-function milling(x: number, y: number, seed: string): { x: number; y: number }[] {
+function milling(x: number, y: number, seed: string, spot = ""): { x: number; y: number }[] {
   const r = SeededRandom.fromString(seed);
+  const m = millRange(spot);
   return [
     { x, y },
-    { x: x + r.int(-28, 28), y: y + r.int(-10, 12) },
-    { x: x + r.int(-28, 28), y: y + r.int(-10, 12) },
+    { x: x + r.int(-m.x, m.x), y: y + r.int(-m.y, m.y) },
+    { x: x + r.int(-m.x, m.x), y: y + r.int(-m.y, m.y) },
   ];
 }
 
@@ -52,13 +58,14 @@ export function placeTownsfolk(area: Area): void {
     const r = SeededRandom.fromString(`${def.id}:${spot}`);
     // Vendors and the healer stand exactly on their mark.
     const exact = !!def.next || !!def.service;
-    const x = exact ? p.x : p.x + r.int(-30, 30);
-    const y = exact ? p.y : p.y + r.int(-12, 12);
+    const m = millRange(spot);
+    const x = exact ? p.x : p.x + r.int(-m.x, m.x);
+    const y = exact ? p.y : p.y + r.int(-m.y, m.y);
     const n = npc(def.id, x, y);
     if (!n) continue;
     n.spot = spot;
     // Vendors and the healer stand their ground; everyone else mills about.
-    if (!def.next && !def.service) n.setRoute(milling(x, y, `${def.id}:${i++}`));
+    if (!def.next && !def.service) n.setRoute(milling(p.x, p.y, `${def.id}:${i++}`, spot));
     area.add(n);
   }
 }
@@ -110,7 +117,7 @@ export class ScheduleDirector {
       if (spot) {
         e.setRoute(null);
         e.walkTo(spot.x, spot.y, () => {
-          if (!e.def?.next && !e.def?.service) e.setRoute(milling(spot.x, spot.y, `${e.def!.id}:${target}`));
+          if (!e.def?.next && !e.def?.service) e.setRoute(milling(spot.x, spot.y, `${e.def!.id}:${target}`, target));
         });
         continue;
       }

@@ -291,6 +291,10 @@ kbd {
 .panel-body {
   overflow-y: auto;
   padding: 2px 4px 4px;
+  /* macOS hides overlay scrollbars: on short screens a cut-off window
+   * looked broken instead of scrollable. */
+  scrollbar-width: thin;
+  scrollbar-color: #9a6a44 rgba(92, 58, 40, 0.15);
 }
 
 .section-title {
@@ -793,6 +797,14 @@ kbd {
   overflow: hidden;
   display: flex;
   justify-content: center;
+}
+
+.minimap {
+  transition: opacity 0.25s;
+}
+
+.minimap.avoid {
+  opacity: 0.2;
 }
 
 .minimap canvas {
@@ -2588,13 +2600,9 @@ kbd {
 }
 
 /* With a window open, contextual tips sit to the side of it. */
-.panel-open .tip-card,
-.panel-open .tip-card.avoid {
-  left: auto;
-  right: 12px;
+.tip-card.docked {
   top: 170px;
   bottom: auto;
-  width: min(250px, 19vw);
   z-index: 60;
 }
 
@@ -3663,8 +3671,8 @@ kbd {
 }
 .tnode {
   position: absolute;
-  width: 50px;
-  height: 50px;
+  width: 46px;
+  height: 46px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
   border: 3px solid #5a4a50;
@@ -3678,28 +3686,37 @@ kbd {
   z-index: 1;
 }
 .tnode img {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   filter: saturate(0.3) brightness(0.7);
 }
 .tnode.keystone {
-  width: 60px;
-  height: 60px;
-  border-radius: 12px;
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
   transform: translate(-50%, -50%) rotate(45deg);
 }
 .tnode.keystone img {
   transform: rotate(-45deg);
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
 }
+/* The rank badge sits centred under every node. On a keystone the button
+ * is rotated, so its bottom-right corner is the diamond's lowest point. */
 .tnode.keystone .tnode-rank {
+  left: auto;
+  top: auto;
+  right: -10px;
+  bottom: -10px;
   transform: rotate(-45deg);
 }
 .tnode-rank {
   position: absolute;
-  bottom: -9px;
-  right: -9px;
+  left: 50%;
+  bottom: -13px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  line-height: 14px;
   font-size: 11px;
   padding: 0 4px;
   background: #1a1016;
@@ -3729,8 +3746,16 @@ kbd {
 .tnode.maxed {
   box-shadow: 0 0 14px rgba(255, 200, 90, 0.8);
 }
+/* Locked nodes stay opaque so links pass behind them, not through them. */
 .tnode.locked {
-  opacity: 0.55;
+  border-color: #3e3036;
+  background: #221820;
+}
+.tnode.locked img {
+  filter: grayscale(0.8) brightness(0.45);
+}
+.tnode.locked .tnode-rank {
+  color: #7a6a70;
 }
 .tnode.hovered,
 .tnode:hover {
@@ -3746,8 +3771,9 @@ kbd {
   0%, 100% { box-shadow: 0 0 0 0 rgba(126, 217, 87, 0.5); }
   50% { box-shadow: 0 0 0 5px rgba(126, 217, 87, 0.15); }
 }
-.ttree-branch.sealed .tnode {
-  opacity: 0.3;
+.ttree-branch.sealed .tnode,
+.ttree-branch.sealed .ttree-links {
+  opacity: 0.35;
 }
 .ttree-seal {
   position: absolute;
@@ -4069,4 +4095,262 @@ kbd {
 }
 .hotslot .wearbar {
   bottom: -2px;
+}
+
+/* ==========================================================================
+   v0.8 — inventory: drag & drop, context menu, sorting
+   ========================================================================== */
+.bag-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sort-ctl {
+  display: flex;
+  gap: 2px;
+}
+.sort-ctl .sort-more {
+  min-width: 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* Something is being dragged: slots stop reacting to hover/press styles and
+ * the cursor says "carrying". */
+body.dragging-item,
+body.dragging-item * {
+  cursor: grabbing !important;
+}
+body.dragging-item .slot:hover {
+  transform: none;
+}
+.slot[data-drop-over="ok"] {
+  filter: drop-shadow(0 0 3px #7ed957) drop-shadow(0 0 1px #7ed957);
+  transform: scale(1.06);
+}
+.slot[data-drop-over="bad"] {
+  filter: drop-shadow(0 0 3px #e0453a) grayscale(0.4);
+  animation: slot-no 0.25s ease-in-out;
+}
+@keyframes slot-no {
+  0%, 100% { translate: 0 0; }
+  30% { translate: -2px 0; }
+  70% { translate: 2px 0; }
+}
+/* The doll slot this item would go in glows while you carry it. */
+.doll-slot.drop-hint .slot {
+  filter: drop-shadow(0 0 4px #ffd54f);
+}
+.doll-slot.drop-hint .equip-label {
+  color: #a86a10;
+  font-weight: 700;
+}
+
+.drag-ghost {
+  position: fixed;
+  z-index: 200;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.35));
+  transform: rotate(-6deg) scale(1.1);
+}
+.drag-ghost img {
+  width: 36px;
+  height: 36px;
+  image-rendering: pixelated;
+}
+.drag-ghost .slot-qty {
+  right: -2px;
+  bottom: -2px;
+}
+
+.ctx-menu {
+  position: fixed;
+  z-index: 210;
+  min-width: 150px;
+  padding: 4px;
+  background: #f3d3a4;
+  color: var(--ink);
+  border: 3px solid #3b2226;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4);
+  font-family: var(--font);
+  animation: ctx-in 0.08s ease-out;
+}
+@keyframes ctx-in {
+  from { opacity: 0; transform: translateY(-3px); }
+}
+.ctx-title {
+  padding: 3px 8px 5px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  border-bottom: 2px solid rgba(59, 34, 38, 0.2);
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+.ctx-item img {
+  width: 16px;
+  height: 16px;
+  image-rendering: pixelated;
+}
+.ctx-item:hover,
+.ctx-item:focus-visible {
+  background: #3b2226;
+  color: #f5ecd6;
+  outline: none;
+}
+.ctx-item.primary {
+  font-weight: 700;
+}
+.bag-grid[data-drop-over="ok"] {
+  outline: 2px dashed #5aa83a;
+  outline-offset: 2px;
+}
+
+/* v0.8 — getting hit: a quick red flash at the screen edges. */
+.hud-hurt {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 90px rgba(220, 30, 20, 0.6);
+  animation: hurt-flash 0.35s ease-out forwards;
+}
+.hud-hurt.heavy {
+  box-shadow: inset 0 0 120px rgba(230, 20, 10, 0.7);
+  animation-duration: 0.55s;
+}
+@keyframes hurt-flash {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* v0.8 — the fishing tug */
+.fish-meter {
+  position: absolute;
+  left: 50%;
+  bottom: 118px;
+  transform: translateX(-50%);
+  width: 340px;
+  padding: 8px 12px 8px;
+  background: rgba(238, 189, 138, 0.96);
+  color: var(--ink);
+  border: 3px solid #3b2226;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  animation: tutorial-in 0.2s ease-out;
+  z-index: 30;
+}
+.fish-title {
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 6px;
+}
+.fish-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fish-arrow {
+  width: 18px;
+  font-size: 16px;
+  text-align: center;
+  color: rgba(59, 34, 38, 0.25);
+}
+.fish-arrow.warn {
+  color: #e0453a;
+  animation: pulse 0.15s steps(2) infinite;
+}
+.fish-arrow.run {
+  color: #e0453a;
+  transform: scale(1.3);
+}
+.fish-arrow.lean {
+  color: #2a9a24;
+  transform: scale(1.3);
+}
+.fish-track {
+  position: relative;
+  flex: 1;
+  height: 18px;
+  background: #2a1e26;
+  border: 2px solid #3b2226;
+  overflow: hidden;
+}
+.fish-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #4a8a3a;
+  box-shadow: inset 0 0 0 1px #7ed957;
+}
+.fish-meter.in-zone .fish-zone {
+  background: #5aa84a;
+}
+.fish-red {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 88%;
+  right: 0;
+  background: repeating-linear-gradient(135deg, #8a2a22 0 4px, #6a1a16 4px 8px);
+}
+.fish-needle {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 4px;
+  margin-left: -2px;
+  background: #f5ecd6;
+  box-shadow: 0 0 0 1px #1a1016;
+}
+.fish-meter.danger .fish-needle {
+  background: #ff6a4a;
+}
+.fish-meter.danger {
+  animation: fish-shake 0.08s linear infinite;
+}
+@keyframes fish-shake {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 1px 0; }
+}
+.fish-meter.slack .fish-needle {
+  opacity: 0.5;
+}
+.fish-progress {
+  height: 8px;
+  margin: 8px 26px 0;
+  background: rgba(59, 34, 38, 0.25);
+  border: 2px solid #3b2226;
+}
+.fish-progress > div {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #4fb0ff, #ffd54f);
+}
+.fish-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--ink-soft);
 }

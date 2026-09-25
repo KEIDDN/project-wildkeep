@@ -4,6 +4,7 @@ import { getNpc } from "../data/npcs";
 import { randomBark } from "../game/npcs";
 import { eventActive } from "../game/social/worldEvents";
 import { tl } from "../i18n";
+import { rumorLine } from "../game/social/rumors";
 
 /**
  * Ambient chatter: every few seconds someone near you says something out
@@ -48,6 +49,14 @@ export class BarkDirector {
       return;
     }
 
+    // Now and then, what they've heard about you instead.
+    if (Math.random() < 0.35) {
+      const rumor = rumorLine(speaker.def!.id);
+      if (rumor) {
+        speaker.say(game, rumor, 3.6);
+        return;
+      }
+    }
     const text = randomBark(speaker.def!);
     if (!text) return;
     speaker.say(game, text);

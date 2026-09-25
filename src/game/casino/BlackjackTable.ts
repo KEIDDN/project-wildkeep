@@ -124,11 +124,30 @@ export class BlackjackTable {
     return false;
   }
 
+  /** Where the table is in its lifecycle: idle (clean felt, waiting for a
+   * bet) → playing / dealer → finished (result on show until the next deal
+   * or until you leave, which returns it to idle). */
+  get status(): "idle" | "playing" | "dealer" | "finished" {
+    const p = this.current?.phase;
+    return !p ? "idle" : p === "player" ? "playing" : p === "dealer" ? "dealer" : "finished";
+  }
+
   /** Walking away: play the hand out instantly (standing on what you have). */
   resolveNow(): void {
     const r = this.current;
     if (!r || r.phase === "done") return;
     this.set(finishDealer(r.phase === "player" ? stand(r) : r, this.shoe, this.rand));
+  }
+
+  /** Leaving the table: settle any open hand (paid exactly once), then clear
+   * the felt so the next visit starts clean. The shoe carries over. */
+  leave(): void {
+    this.resolveNow();
+    if (!this.current) return;
+    this.current = null;
+    this.paid = false;
+    this.version++;
+    for (const fn of Array.from(this.listeners)) fn();
   }
 
   private set(next: Round) {

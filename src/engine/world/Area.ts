@@ -3,8 +3,9 @@ import type { AreaId, Rect, Vector2 } from "../../game/core/types";
 import { CollisionWorld } from "../Collision";
 import type { Entity, Interactable } from "../entities/Entity";
 import { isInteractable } from "../entities/Entity";
-import { Prop } from "../entities/Props";
+import { Npc, Prop } from "../entities/Props";
 import type { LightSource } from "../fx/Lighting";
+import type { VisionMap } from "../fx/Vision";
 import { ASSETS, buildingGlowPath, buildingPath, propPath, type BuildingMeta } from "../../data/assets";
 import { tex } from "../textures";
 import type { TravelRequest } from "../../store/worldStore";
@@ -37,6 +38,8 @@ export class Area {
   readonly triggers: Trigger[] = [];
   readonly staticLights: LightSource[] = [];
   ambient = 1;
+  /** Line-of-sight fog (dungeon floors). Null = everything is visible. */
+  vision: VisionMap | null = null;
   /** Skip drawing off-screen entities. Only worth it on big maps. */
   cull = false;
   /** Background colour outside the map (visible around small interiors). */
@@ -71,9 +74,15 @@ export class Area {
     this.entities.push(e);
     this.entityLayer.addChild(e.view);
     e.syncView();
-    // Stationary entities may declare a feet collider.
+    // Stationary entities may declare a feet collider. Someone sitting on a
+    // chair (already solid) doesn't get another one: it only spilled into
+    // the aisle and closed gaps that plainly looked open.
     const c = (e as { collider?: { w: number; h: number } }).collider;
-    if (c) this.collision.addRect({ x: e.x - c.w / 2, y: e.y - c.h, w: c.w, h: c.h });
+    if (c) {
+      const r = { x: e.x - c.w / 2, y: e.y - c.h, w: c.w, h: c.h };
+      const seated = e instanceof Npc && this.collision.blocked({ x: e.x - 1, y: e.y - 2, w: 2, h: 2 });
+      if (!seated) this.collision.addRect(r);
+    }
     return e;
   }
 
@@ -182,5 +191,6 @@ export class Area {
     this.root.destroy({ children: true });
     this.glow.destroy({ children: true });
     for (const t of baked) t.destroy(true);
+    this.vision?.destroy();
   }
 }

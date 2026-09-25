@@ -42,8 +42,13 @@ export function BlackjackPanel() {
     return () => clearTimeout(t);
   }, [phase, round]);
 
-  // Walking away mid-hand stands on what you have.
-  useEffect(() => () => table.resolveNow(), []);
+  // Walking away mid-hand stands on what you have, and the felt is cleared
+  // for next time. (Also on mount, in case the panel was torn down without
+  // unmounting cleanly.)
+  useEffect(() => {
+    if (table.status === "finished") table.leave();
+    return () => table.leave();
+  }, []);
 
   const act = (ok: boolean, sound: "card" | "deny" = "card") => audio.sfx(ok ? sound : "deny");
   const inHand = table.inHand;
@@ -165,7 +170,10 @@ export function RoulettePanel() {
   const spinning = wheel.spinning;
 
   // Walking away mid-spin still pays out what the wheel decided.
-  useEffect(() => () => wheel.settle(), []);
+  useEffect(() => {
+    if (!wheel.spinning) wheel.leave();
+    return () => wheel.leave();
+  }, []);
 
   if (gambling.level < ROULETTE_LEVEL) {
     return (

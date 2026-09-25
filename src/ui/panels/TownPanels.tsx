@@ -11,6 +11,7 @@ import { audio } from "../../game/audio/AudioManager";
 import { Panel } from "../components/Panel";
 import { EmptySlot, ItemIcon } from "../components/ItemIcon";
 import { sortStacks } from "./InventoryPanel";
+import { beginItemDrag, DragGhost } from "../components/DragItem";
 import { houseLevelInfo } from "../../data/house";
 import { houseUpgradeBlocker, upgradeHouse } from "../../game/actions";
 import { getItem } from "../../data/items";
@@ -51,9 +52,17 @@ export function StashPanel() {
       <div className="stash-layout">
         <div>
           <div className="section-title">{t("stash.bag")}</div>
-          <div className="bag-grid small">
+          <div className="bag-grid small" data-drop="bag">
             {sortStacks(bag).map((s, i) => (
-              <ItemIcon key={`${s.itemId}-${i}`} itemId={s.itemId} quantity={s.quantity} stolen={s.stolen} size={44} onClick={() => deposit(s)} />
+              <ItemIcon
+                key={`${s.itemId}-${i}`}
+                itemId={s.itemId}
+                quantity={s.quantity}
+                stolen={s.stolen}
+                size={44}
+                onClick={() => deposit(s)}
+                onPointerDown={(e) => beginItemDrag(e, { itemId: s.itemId, quantity: s.quantity, accepts: (tg) => tg === "trunk", onDrop: () => deposit(s) })}
+              />
             ))}
             {Array.from({ length: Math.max(0, 24 - bag.length) }, (_, i) => (
               <EmptySlot key={i} size={44} />
@@ -63,9 +72,17 @@ export function StashPanel() {
         <div className="stash-arrow">⇄</div>
         <div>
           <div className="section-title">{t("stash.trunk")}</div>
-          <div className="bag-grid small">
+          <div className="bag-grid small" data-drop="trunk">
             {sortStacks(stash).map((s, i) => (
-              <ItemIcon key={`${s.itemId}-${i}`} itemId={s.itemId} quantity={s.quantity} stolen={s.stolen} size={44} onClick={() => withdraw(s)} />
+              <ItemIcon
+                key={`${s.itemId}-${i}`}
+                itemId={s.itemId}
+                quantity={s.quantity}
+                stolen={s.stolen}
+                size={44}
+                onClick={() => withdraw(s)}
+                onPointerDown={(e) => beginItemDrag(e, { itemId: s.itemId, quantity: s.quantity, accepts: (tg) => tg === "bag", onDrop: () => withdraw(s) })}
+              />
             ))}
             {Array.from({ length: Math.max(0, slots - stash.length) }, (_, i) => (
               <EmptySlot key={i} size={44} />
@@ -73,6 +90,7 @@ export function StashPanel() {
           </div>
         </div>
       </div>
+      <DragGhost />
     </Panel>
   );
 }
@@ -146,6 +164,16 @@ export function TavernPanel() {
           </div>
           <button type="button" className="btn btn-small" onClick={() => useUiStore.getState().openPanel("blackjack")}>
             {t("tavern.play")}
+          </button>
+        </div>
+        <div className="shop-row">
+          <img className="menu-icon" src="/icons/crop_grape.png" alt="" />
+          <div className="shop-row-name">
+            <span>{t("tavern.produce")}</span>
+            <small>{t("tavern.produceDesc")}</small>
+          </div>
+          <button type="button" className="btn btn-small" onClick={() => useUiStore.getState().openPanel("shop", { stock: "kitchen" })}>
+            {t("shop.sell")}
           </button>
         </div>
       </div>
