@@ -1,4 +1,4 @@
-import { Application, Container, Culler, Graphics, Text, TextureSource } from "pixi.js";
+import { Application, Container, Culler, Graphics, Text, TextureSource, Ticker } from "pixi.js";
 import { Camera } from "./Camera";
 import { Input } from "./Input";
 import { Effects } from "./fx/Effects";
@@ -39,8 +39,8 @@ import { houseLevelInfo } from "../data/house";
 import { currentHouseLevel } from "../game/systems/playerStats";
 import { saveGame } from "../game/save/gameSave";
 import { initQuests, questDef, questGuide } from "../game/quests";
-import { bountyDialogue, initReputation } from "../game/social/reputation";
-import { initFarming } from "../game/farming";
+import { bountyDialogue, bountyMorning, initReputation } from "../game/social/reputation";
+import { gardenStatus, initFarming } from "../game/farming";
 import { giftDialogue } from "../game/relationships";
 import { drunkLevel, initDrink, morningAfter } from "../game/tavern/drink";
 import { Npc } from "./entities/Props";
@@ -588,6 +588,7 @@ export class Game {
     p.heal(Math.round(playerEffectiveStats(p).maxHp * 0.5));
     await this.loadArea("house", "bed");
     const story = morningAfter();
+    bountyMorning();
     saveGame();
     await wait(400);
     this.ui.setFading(false);
@@ -605,11 +606,13 @@ export class Game {
     if (this.destroyed) return;
     const house = houseLevelInfo(currentHouseLevel());
     const wellRested = house.perks.restedXpBonus > 0;
+    // Went to bed properly drunk: last night follows you into the morning.
+    const hungover = drunkLevel() >= 50;
     const day = useTimeStore.getState().sleep(wellRested);
     useSocialStore.getState().setDrunk(0);
     this.minuteAcc = 0;
     usePlayerStore.getState().fullHeal();
-    refillEnergy(1);
+    refillEnergy(hungover ? 0.75 : 1);
     useWorldStore.getState().clearNodeRespawns();
     saveGame();
     gameEvents.emit("slept", { day });
@@ -620,6 +623,12 @@ export class Game {
     this.transitioning = false;
     this.ui.showAreaBanner(t("area.dayBanner", { n: day }), wellRested ? t("area.wellRested", { pct: Math.round(house.perks.restedXpBonus * 100) }) : t("area.newDay"));
     this.ui.pushToast(t("toast.slept"), "info", { icon: "sleep" });
+    if (hungover) this.ui.pushToast(t("drunk.hangover"), "warning", { icon: "beer" });
+    bountyMorning();
+    // A reason to step outside: what the garden did overnight.
+    const garden = gardenStatus();
+    if (garden.ripe) this.ui.pushToast(t("farm.morningRipe", { n: garden.ripe }), "levelup", { icon: "seed_carrot" });
+    else if (garden.thirsty) this.ui.pushToast(t("farm.morningThirsty", { n: garden.thirsty }), "info", { icon: "seed_carrot" });
   }
 
   // ---------------------------------------------------------------------------
@@ -713,6 +722,11 @@ export class Game {
     if (useSettingsStore.getState().screenShake) this.camera.shake(mag, dur);
   }
 
+  /** Directional camera nudge along (dx, dy); honours the screen-shake setting. */
+  kick(dx: number, dy: number, mag: number): void {
+    if (useSettingsStore.getState().screenShake) this.camera.kick(dx, dy, mag);
+  }
+
   // ---------------------------------------------------------------------------
   // Entities & loot
   // ---------------------------------------------------------------------------
@@ -750,7 +764,11 @@ export class Game {
   private applyTimeScale(): void {
     if (this.destroyed || !this.app?.ticker) return;
     const now = performance.now();
-    this.app.ticker.speed = now < this.freezeUntil ? 0.04 : now < this.slowUntil ? this.slowSpeed : 1;
+    const speed = now < this.freezeUntil ? 0.04 : now < this.slowUntil ? this.slowSpeed : 1;
+    this.app.ticker.speed = speed;
+    // Sprite animations (AnimatedSprite) run on Pixi's shared ticker, not the
+    // app's: without this a hit-stop froze the world but the swing played on.
+    Ticker.shared.speed = speed;
   }
 
   removeEntity(e: Entity): void {
@@ -925,6 +943,7 @@ export class Game {
 
   destroy(): void {
     this.destroyed = true;
+    Ticker.shared.speed = 1;
     for (const u of this.unsubs) u();
     this.input?.destroy();
     if (this.app?.renderer) {

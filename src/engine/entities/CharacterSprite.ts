@@ -159,6 +159,11 @@ export class CharacterSprite {
     this.syncLayers();
   }
 
+  /** Carry on playing from the held frame. */
+  resume(): void {
+    if (!this.sprite.playing) this.sprite.play();
+  }
+
   get frame(): number {
     return this.sprite.currentFrame;
   }

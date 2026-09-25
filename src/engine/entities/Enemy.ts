@@ -824,7 +824,7 @@ export class Enemy extends Entity implements Hittable {
       bold: crit || !!info.heavy,
     });
     game.fx.burst(this.x, this.centerY, this.def.undead ? "bone" : "blood", crit ? 10 : blocked ? 0 : 6, { speed: 50, up: 50 });
-    audio.sfx("enemy_hit", { pitch: crit ? 0.8 : blocked ? 1.4 : 1 });
+    audio.sfx("enemy_hit", { pitch: (crit ? 0.8 : blocked ? 1.4 : 1) / Math.sqrt(info.weight ?? 1) });
     if (this.hp <= 0) {
       this.die(game);
       return;

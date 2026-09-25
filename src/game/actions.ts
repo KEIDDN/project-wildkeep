@@ -19,7 +19,7 @@ import { useSocialStore } from "../store/socialStore";
 import { buyPriceFactor, sellPriceFactor } from "./social/honor";
 import { eventActive } from "./social/worldEvents";
 import { MYSTERY_BOX_LOOT } from "../data/worldEvents";
-import { CRAFT_GOLD_MULT } from "../data/shops";
+import { CRAFT_GOLD_MULT, SPECIALISTS } from "../data/shops";
 import { hasPerk } from "./relationships";
 import { itemName, skillName, houseName } from "../i18n/content";
 import { t, tl } from "../i18n";
@@ -288,6 +288,24 @@ export function shopSellPrice(itemId: string): number {
 export function shopBuyPrice(base: number, opts: { mira?: boolean } = {}): number {
   const friend = opts.mira && hasPerk("mira_discount") ? 0.9 : 1;
   return Math.max(1, Math.round(base * buyPriceFactor(useSocialStore.getState().honor) * hagglerBuy(usePlayerStore.getState().talents) * friend));
+}
+
+/**
+ * A counter's list price for you, floored so you can't buy something and
+ * sell it straight back (to Mira or whichever specialist pays best) for a
+ * profit. Merchant stock is unlimited, so a cheap line or a daily deal plus
+ * a hero's name, Haggler and festival prices used to be free gold. Only
+ * bites when *your* modifiers would make the flip pay; otherwise it's the
+ * list price as designed.
+ */
+export function listPrice(itemId: string, price: number): number {
+  const def = getItem(itemId);
+  let rate = 1;
+  if (!def.equipSlot) for (const sp of Object.values(SPECIALISTS)) if ((sp.buys as readonly string[]).includes(itemId)) rate = Math.max(rate, sp.rate);
+  const resale = Math.round(shopSellPrice(itemId) * rate);
+  let p = price;
+  while (shopBuyPrice(p, { mira: true }) < resale) p++;
+  return p;
 }
 
 /** Why the shop won't take this, or null if it will. Equipped gear is never

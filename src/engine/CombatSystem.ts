@@ -115,7 +115,7 @@ export class CombatSystem {
       }
       const roll = resolveAttack(stats, e.stats);
       const damage = Math.max(1, Math.round(roll.damage * m));
-      e.takeHit(g, damage, roll.isCrit, p.x, p.y, knock, { type: w.damageType, heavy, bane, poise: w.poise * (heavy ? 3 : 1) });
+      e.takeHit(g, damage, roll.isCrit, p.x, p.y, knock, { type: w.damageType, heavy, bane, poise: w.poise * (heavy ? 3 : 1), weight: w.impact });
       g.fx.burst(e.x, e.centerY, "spark", roll.isCrit || heavy ? 9 : 4, { speed: 60, up: 24, life: 0.22 });
       g.fx.ring(e.x, e.centerY, roll.isCrit || big ? 14 : 9, swing.riposte ? 0x9fe8ff : roll.isCrit ? 0xffd54f : 0xffffff, 0.2);
       hits++;
@@ -124,9 +124,13 @@ export class CombatSystem {
     if (hits) wearSlot("weapon", 1);
     if (swing.riposte && hits) g.fx.text(p.x, p.y - 38, t("combat.riposte"), 0x9fe8ff, { size: 9, bold: true, life: 0.9 });
     if (hits > 0) {
-      g.shake(heavy ? 4 : big || crits ? 3 : hits > 1 ? 2.2 : 1.5, heavy ? 0.22 : big ? 0.16 : 0.1);
+      // The weapon's weight decides how hard a hit lands: a dagger ticks, a
+      // maul stops the world for a moment and shoves the camera.
+      const im = w.impact;
+      g.shake((heavy ? 4 : big || crits ? 3 : hits > 1 ? 2.2 : 1.5) * Math.min(1.3, im), heavy ? 0.22 : big ? 0.16 : 0.1);
+      g.kick(f.x, f.y, (heavy ? 3 : big ? 2.2 : 1.2) * im);
       // Brief hit-stop sells the impact (longer for big hits).
-      g.hitStop(heavy ? 120 : big || crits ? 80 : 45);
+      g.hitStop(Math.round((heavy ? 120 : big || crits ? 80 : 45) * im));
     }
   }
 

@@ -34,20 +34,32 @@ export interface StealDef {
   honor: number;
 }
 
+/**
+ * How closely people watch your hands: 1 for a stranger. A poor name with
+ * the watch (every time you're caught) makes the village warier, up to
+ * about half again; underworld know-how takes up to a quarter off.
+ */
+export function watchfulness(): number {
+  const rep = useSocialStore.getState().rep;
+  return (1 + Math.max(0, -rep.watch) / 200) * (1 - Math.min(0.25, Math.max(0, rep.underworld) / 240));
+}
+
 export function attemptSteal(game: Game, x: number, y: number, def: StealDef): void {
   const day = useTimeStore.getState().day;
   const social = useSocialStore.getState();
   if (social.usedToday(def.key, day)) return;
   social.useToday(def.key, day);
 
-  // Everyone who might be watching gets a chance to notice.
+  // Everyone who might be watching gets a chance to notice — more so once
+  // the watch knows your face, less once you know the trade.
+  const wary = watchfulness();
   let unseen = 1;
   let witness: Npc | null = null;
   let best = 0;
   for (const e of game.area.entities) {
     if (!(e instanceof Npc) || e.removed) continue;
     const c = e.notices(x, y);
-    unseen *= 1 - c * 0.85;
+    unseen *= 1 - Math.min(0.95, c * 0.85 * wary);
     if (c > best) {
       best = c;
       witness = e;

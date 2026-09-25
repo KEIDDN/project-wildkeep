@@ -183,6 +183,19 @@ export function harvest(key: string): { itemId: string; quantity: number } | nul
   return { itemId: c.item, quantity: q };
 }
 
+/** What's waiting in the garden: ripe plants, and planted ones not yet watered today. */
+export function gardenStatus(): { ripe: number; thirsty: number } {
+  let ripe = 0;
+  let thirsty = 0;
+  for (const [x, y] of openPlots()) {
+    const p = plotAt(plotKey(x, y));
+    if (!p.crop) continue;
+    if (isRipe(p)) ripe++;
+    else if (!wateredToday(p)) thirsty++;
+  }
+  return { ripe, thirsty };
+}
+
 // ---- time: growing ----------------------------------------------------------------------
 
 let last: { day: number; minute: number } | null = null;

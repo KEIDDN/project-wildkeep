@@ -599,6 +599,7 @@ export const en = {
     title: "Skills",
     rested: "Well Rested: +{pct}% skill XP today",
     grow: "Skills grow as you use them.",
+    talentsSub: "Choices that stick: what kind of adventurer you become.",
     mastered: "Mastered",
     perk: {
       strength: "+{n} attack",
@@ -901,6 +902,8 @@ export const en = {
     returnBoard: "Hand it in at the notice board",
     netWon: "{n}/{total} gold ahead",
     rewardGold: "+{n} gold",
+    trusted: "the village trusts you",
+    distrusted: "folk don't trust you",
     rewardXp: "+{n} XP",
     rewardTalent: "+{n} talent point! ({k:skills})",
     paid: "−{n} gold",
@@ -933,6 +936,8 @@ export const en = {
   },
 
   farm: {
+    morningRipe: "The garden came good overnight. Ready to pick: {n}.",
+    morningThirsty: "The garden's waiting: water it today or nothing grows ({n} unwatered).",
     till: "Till",
     tilledSoil: "the tilled soil",
     needHoe: "You need a hoe to break this ground. (Hob, or Mira's shop.)",
@@ -998,6 +1003,7 @@ export const en = {
     bountyLabel: "Bounty",
     bounty: {
       added: "The watch puts {n}g on your head.",
+      grew: "Word from the watch: an unpaid bounty doesn't shrink. It's {n}g now.",
       stop: "Hold it right there. You've been making friends with other people's property.",
       amount: "The watch says you owe {n} gold. Pay up, and we forget it happened. Mostly.",
       pay: "Pay the fine ({n}g)",
@@ -1019,6 +1025,7 @@ export const en = {
 
   drunk: {
     hic: "*hic*",
+    hangover: "Hungover. Your head is a drum and somebody's playing it. Only three-quarters of your energy turned up today.",
     tier: { sober: "Sober", tipsy: "Tipsy", drunk: "Drunk", wasted: "Wasted" },
     enter: {
       sober: "Your head clears. The floor stops moving. Mostly.",
@@ -1307,9 +1314,9 @@ export const en = {
     lowers: "Lowers it:",
     lowersList: "stealing (especially getting caught), hitting villagers, shady jobs, unpaid bounties.",
     group: {
-      village: "The townsfolk. Helping them, quests and returning what you took win them over.",
-      watch: "The guards. Theft, fights and unpaid bounties sour them; paying up clears the air.",
-      underworld: "Finn and friends. Clean thefts, shady jobs and big gambles impress them. At +20 Finn fences stolen goods.",
+      village: "The townsfolk. Helping them, quests and returning what you took win them over. The trusted get the better-paid jobs on the notice board.",
+      watch: "The guards. Theft, fights and unpaid bounties sour them; paying up clears the air. Get on their bad side and people watch your hands — and an unpaid bounty grows every night.",
+      underworld: "Finn and friends. Clean thefts, shady jobs and big gambles impress them. At +20 Finn fences stolen goods, and the more they rate you, the lighter your fingers.",
     },
     bounty: "The watch wants {n} gold from you.",
     noBounty: "No bounty on your head.",

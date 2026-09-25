@@ -4,8 +4,9 @@ import { useInventoryStore } from "../../store/inventoryStore";
 import { useUiStore } from "../../store/uiStore";
 import { useTutorialStore } from "../../store/tutorialStore";
 import { usePlayerStore } from "../../store/playerStore";
-import { acceptQuest, boardOffers, canTakeBoard, completeQuest, declinedToday, isReady, objectiveText, openOffers, progressLabel, questDef, questText } from "../../game/quests";
-import type { QuestDef, QuestReward } from "../../data/quests";
+import { useSocialStore } from "../../store/socialStore";
+import { acceptQuest, questGold, boardOffers, canTakeBoard, completeQuest, declinedToday, isReady, objectiveText, openOffers, progressLabel, questDef, questText } from "../../game/quests";
+import type { QuestDef } from "../../data/quests";
 import { getNpc } from "../../data/npcs";
 import { getItem } from "../../data/items";
 import { audio } from "../../game/audio/AudioManager";
@@ -23,9 +24,12 @@ function useQuestTick() {
   usePlayerStore((s) => s.level);
 }
 
-function RewardLine({ r }: { r: QuestReward }) {
+function RewardLine({ def }: { def: QuestDef }) {
+  useSocialStore((s) => s.rep.village);
+  const r = def.rewards;
   const parts: string[] = [];
-  if (r.gold) parts.push(t("quests.rewardGold", { n: r.gold }));
+  const gold = questGold(def);
+  if (gold) parts.push(t("quests.rewardGold", { n: gold }) + (gold > (r.gold ?? 0) ? ` (${t("quests.trusted")})` : gold < (r.gold ?? 0) ? ` (${t("quests.distrusted")})` : ""));
   if (r.xp) parts.push(t("quests.rewardXp", { n: r.xp }));
   if (r.talentPoints) parts.push(t("quests.rewardTalent", { n: r.talentPoints }).replace(" (K)", ""));
   for (const i of r.items ?? []) parts.push(`${i.count > 1 ? `${i.count}× ` : ""}${itemName(i.item)}`);
@@ -87,7 +91,7 @@ export function QuestJournal() {
             <div className="quest-objective">
               ▸ {objectiveText(id)} {prog && <span className="quest-progress">{prog}</span>}
             </div>
-            <RewardLine r={def.rewards} />
+            <RewardLine def={def} />
             <div className="quest-actions">
               <button type="button" className={`btn btn-small${tracked === id ? " active" : ""}`} onClick={() => useQuestStore.getState().track(tracked === id ? null : id)}>
                 {tracked === id ? t("quests.tracked") : t("quests.track")}
@@ -144,7 +148,7 @@ export function BoardPanel() {
                   ▸ {objectiveText(id)} {progressLabel(id) && <span className="quest-progress">{progressLabel(id)}</span>}
                 </div>
               )}
-              <RewardLine r={def.rewards} />
+              <RewardLine def={def} />
               <div className="quest-actions">
                 {finished ? (
                   <span className="quest-status">{t("quests.boardDone")}</span>

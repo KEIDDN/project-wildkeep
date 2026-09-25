@@ -94,6 +94,8 @@ export interface HitInfo {
   poise?: number;
   /** A monster's blast, not the player (no aggro fanfare, no crits). */
   friendly?: boolean;
+  /** How heavy the weapon is (1 = sword): heavier blows sound deeper. */
+  weight?: number;
 }
 
 export function isHittable(e: unknown): e is Hittable {

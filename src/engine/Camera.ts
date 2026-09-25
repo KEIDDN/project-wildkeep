@@ -31,6 +31,9 @@ export class Camera {
   originY = 0;
   private leadX = 0;
   private leadY = 0;
+  /** Directional nudge (hits, impacts): springs back to zero. */
+  private kickX = 0;
+  private kickY = 0;
 
   resize(screenW: number, screenH: number): void {
     this.screenW = screenW;
@@ -78,7 +81,17 @@ export class Camera {
     this.shakeTime = Math.max(this.shakeTime, duration);
   }
 
+  /** Push the view a few pixels along (dx, dy) — a blow you can feel land. */
+  kick(dx: number, dy: number, magnitude: number): void {
+    const len = Math.hypot(dx, dy) || 1;
+    this.kickX = Math.max(-6, Math.min(6, this.kickX + (dx / len) * magnitude));
+    this.kickY = Math.max(-6, Math.min(6, this.kickY + (dy / len) * magnitude));
+  }
+
   update(dt: number): void {
+    const decay = Math.exp(-dt * 16);
+    this.kickX *= decay;
+    this.kickY *= decay;
     if (this.shakeTime > 0) {
       this.shakeTime -= dt;
       const m = this.shakeMag * Math.max(0, this.shakeTime * 4);
@@ -104,8 +117,8 @@ export class Camera {
   apply(world: Container): void {
     world.scale.set(this.zoom);
     // Round to whole screen pixels so the art grid never lands between pixels.
-    this.originX = Math.round(this.screenW / 2 - (this.x + this.offsetX) * this.zoom);
-    this.originY = Math.round(this.screenH / 2 - (this.y + this.offsetY) * this.zoom);
+    this.originX = Math.round(this.screenW / 2 - (this.x + this.offsetX + this.kickX) * this.zoom);
+    this.originY = Math.round(this.screenH / 2 - (this.y + this.offsetY + this.kickY) * this.zoom);
     world.position.set(this.originX, this.originY);
   }
 

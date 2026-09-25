@@ -185,3 +185,16 @@ export function initReputation(questKind: (id: string) => string | null): void {
     if (boss) adjustRep("village", 5);
   });
 }
+
+/** An unpaid bounty grows this much a night (plus 5g), up to the cap. */
+export const BOUNTY_INTEREST = 0.1;
+export const BOUNTY_CAP = 400;
+
+/** A night passed (slept or passed out): an unpaid bounty doesn't go away. */
+export function bountyMorning(): void {
+  const bounty = useSocialStore.getState().bounty;
+  if (bounty <= 0 || bounty >= BOUNTY_CAP) return;
+  const next = Math.min(BOUNTY_CAP, Math.round(bounty * (1 + BOUNTY_INTEREST)) + 5);
+  useSocialStore.getState().addBounty(next - bounty);
+  useUiStore.getState().pushToast(t("rep.bounty.grew", { n: next }), "warning", { icon: "helm_iron" });
+}

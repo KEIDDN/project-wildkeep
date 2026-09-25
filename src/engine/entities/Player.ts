@@ -105,6 +105,10 @@ export const COMBO = [
 ] as const;
 
 const DODGE = { time: 0.26, speed: 235, invuln: 0.32, cooldown: 0.9 };
+/** How long an early dodge / parry press is remembered. */
+const INPUT_BUFFER = 0.16;
+/** A hit's flinch can be rolled out of after this long. */
+const HURT_DODGE_AFTER = 0.1;
 /** Whirlwind spin: how long it lasts, and when it connects. */
 const SPIN = { time: 0.4, impact: 0.12 };
 
@@ -161,6 +165,12 @@ export class Player extends Entity {
   private attackCooldown = 0;
   /** Buffered attack press: a press during a hit-stun or swing still fires. */
   private attackBuffer = 0;
+  /** Buffered dodge / parry presses: pressed a beat early (mid-swing, while
+   * reeling from a hit) they still fire the moment they're allowed. */
+  private dodgeBuffer = 0;
+  private parryBuffer = 0;
+  /** Seconds the current swing still hangs at the top (heavy weapons). */
+  private windupLeft = 0;
   /** Aim point of the buffered attack (mouse), if any. */
   private attackAim: { x: number; y: number } | null = null;
   /** Time left to continue the combo after a swing ends. */
@@ -357,6 +367,7 @@ export class Player extends Entity {
       this.fishing = null;
       this.bobber.visible = false;
     }
+    if (next !== "attack") this.windupLeft = 0;
     this.state = next;
     this.stateTime = 0;
   }
@@ -435,6 +446,8 @@ export class Player extends Entity {
     this.stateTime += dt;
     this.invuln = Math.max(0, this.invuln - dt);
     this.attackBuffer = Math.max(0, this.attackBuffer - dt);
+    this.dodgeBuffer = Math.max(0, this.dodgeBuffer - dt);
+    this.parryBuffer = Math.max(0, this.parryBuffer - dt);
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.dodgeCooldown = Math.max(0, this.dodgeCooldown - dt);
     this.whirlCooldown = Math.max(0, this.whirlCooldown - dt);
@@ -468,9 +481,13 @@ export class Player extends Entity {
       this.attackBuffer = 0.3;
       this.attackAim = input.pressedByMouse("attack") ? game.camera.screenToWorld(input.mouseX, input.mouseY) : null;
     }
-    const wantsDodge = !this.frozen && input.pressed("dodge");
+    const pressedDodge = !this.frozen && input.pressed("dodge");
+    if (pressedDodge) this.dodgeBuffer = INPUT_BUFFER;
+    if (!this.frozen && input.pressed("parry")) this.parryBuffer = INPUT_BUFFER;
+    if (this.frozen) this.dodgeBuffer = this.parryBuffer = 0;
+    const wantsDodge = this.dodgeBuffer > 0;
     const wantsWhirl = !this.frozen && input.pressed("ability");
-    const wantsParry = !this.frozen && input.pressed("parry");
+    const wantsParry = this.parryBuffer > 0;
     const wantsCast = !this.frozen && input.pressed("cast");
     // Mana trickles back (magic only).
     const mMax = this.maxMana;
@@ -510,7 +527,9 @@ export class Player extends Entity {
     switch (this.state) {
       case "hurt":
         this.hurtTimer -= dt;
-        if (this.hurtTimer <= 0) this.setState("free");
+        // Roll out of a hit once the flinch has registered.
+        if (wantsDodge && this.stateTime >= HURT_DODGE_AFTER && this.dodgeCooldown <= 0) this.startDodge(game, axis);
+        else if (this.hurtTimer <= 0) this.setState("free");
         break;
 
       case "dodge": {
@@ -553,10 +572,17 @@ export class Player extends Entity {
 
       case "attack": {
         const step = COMBO[this.swing?.step ?? 0];
+        // Heavy weapons hang at the top of the swing for a beat before it falls.
+        if (this.windupLeft > 0 && this.body.frame >= IMPACT_FRAME.attack - 1) {
+          this.windupLeft -= dt;
+          if (this.windupLeft > 0) this.body.hold(IMPACT_FRAME.attack - 1);
+          else this.body.resume();
+        }
         // Drift forward during the swing; the finisher (and heavies) lunge.
-        if (this.body.frame <= IMPACT_FRAME.attack) {
+        // How far is the weapon's: spears step into a thrust, mauls plant.
+        if (this.body.frame <= IMPACT_FRAME.attack && this.windupLeft <= 0) {
           const f = this.facingVector();
-          const lunge = this.swing?.heavy ? 60 : step.lunge;
+          const lunge = (this.swing?.heavy ? 60 : step.lunge) * (this.swing?.weapon.lunge ?? 1);
           this.moveBy(game, f.x * lunge * dt, f.y * lunge * dt);
         }
         const recovering = this.body.frame >= CHAIN_FRAME;
@@ -619,7 +645,8 @@ export class Player extends Entity {
       case "fish": {
         // Mid-fight the direction keys are for leaning, and dodge lets go.
         const fighting = this.fishing?.phase === "fight";
-        this.updateFishing(game, dt, fighting ? wantsDodge : wantsMove || wantsDodge || (this.frozen === false && game.input.pressed("attack")));
+        this.dodgeBuffer = 0;
+        this.updateFishing(game, dt, fighting ? pressedDodge : wantsMove || pressedDodge || (this.frozen === false && game.input.pressed("attack")));
         break;
       }
 
@@ -760,18 +787,46 @@ export class Player extends Entity {
    * attack was a click, else at the held direction, else straight ahead. */
   private beginSwing(game: Game, axis: { x: number; y: number }, heavy = false) {
     this.attackBuffer = 0;
+    const weapon = this.weapon;
     if (this.attackAim) this.faceToward(this.attackAim.x, this.attackAim.y);
     else if (axis.x !== 0 || axis.y !== 0) this.faceToward(this.x + axis.x, this.y + axis.y);
+    else this.assistAim(game, weapon);
     this.attackAim = null;
     this.stateTime = 0;
-    const weapon = this.weapon;
     const last = heavy || this.comboStep === weapon.combo.length - 1;
     const winded = !this.spend(weapon.cost + (heavy ? STAMINA.heavy * heavyCostMult(usePlayerStore.getState().talents) : 0));
     if (winded) this.nagWinded(game);
     this.swing = { step: heavy ? 2 : weapon.combo[this.comboStep], weapon, heavy, winded, riposte: false, finisher: last };
     this.attackCooldown = heavy ? 0.35 : last ? 0.45 / weapon.speed : 0.12;
+    this.windupLeft = heavy ? 0 : weapon.windup * (last ? 1.4 : 1);
     this.syncAnim(true);
-    audio.sfx("swing", { pitch: heavy ? 0.6 : last ? 0.8 : this.comboStep % 2 === 1 ? 1.12 : 1 });
+    // Heavier weapons whoosh lower, daggers hiss.
+    audio.sfx("swing", { pitch: (heavy ? 0.6 : last ? 0.8 : this.comboStep % 2 === 1 ? 1.12 : 1) * Math.sqrt(weapon.speed) });
+  }
+
+  /**
+   * Keyboard aim assist: swinging without a direction held (or a click) at a
+   * monster that's in reach but off to the side turns you to face it, so
+   * four-way facing never makes you whiff at something right beside you.
+   * Anything already in the arc wins, so you never get pulled off a target.
+   */
+  private assistAim(game: Game, weapon: WeaponProfile) {
+    const reach = 24 * weapon.reach * 1.1;
+    const f = this.facingVector();
+    let best: { x: number; y: number } | null = null;
+    let bestD = Infinity;
+    for (const e of game.enemies()) {
+      const dx = e.x - this.x;
+      const dy = e.centerY - (this.y - 9);
+      const d = Math.hypot(dx, dy);
+      if (d > reach + e.hitRadius) continue;
+      if (d <= 8 || (dx * f.x + dy * f.y) / d >= weapon.arc) return;
+      if (d < bestD) {
+        bestD = d;
+        best = { x: e.x, y: e.y };
+      }
+    }
+    if (best) this.faceToward(best.x, best.y);
   }
 
   /** Kept for callers outside the loop (e.g. tests); goes through the combo. */
@@ -894,6 +949,7 @@ export class Player extends Entity {
   }
 
   private startParry(game: Game, axis: { x: number; y: number }) {
+    this.parryBuffer = 0;
     if (this.stamina < PARRY.cost) {
       this.nagWinded(game);
       audio.sfx("deny");
@@ -939,6 +995,7 @@ export class Player extends Entity {
 
   private startDodge(game: Game, axis: { x: number; y: number }) {
     if (this.dodgeCooldown > 0) return;
+    this.dodgeBuffer = 0;
     const cost = STAMINA.dodge * drunkDodgeCost();
     if (this.stamina < cost) {
       this.nagWinded(game);
@@ -1273,6 +1330,7 @@ export class Player extends Entity {
     game.fx.text(this.x, this.y - 30, `-${damage}`, 0xff5a4e, { size: 9, bold: true });
     game.fx.burst(this.x, this.y - 10, "blood", 6, { speed: 40, up: 40 });
     game.shake(3, 0.2);
+    game.kick(this.x - fromX, this.y - fromY, 3);
     audio.sfx("player_hurt");
     this.comboStep = 0;
     this.comboWindow = 0;

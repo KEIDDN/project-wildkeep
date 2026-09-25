@@ -599,6 +599,7 @@ export const es: Dict = {
     title: "Habilidades",
     rested: "Buen descanso: +{pct}% de EXP de habilidades hoy",
     grow: "Las habilidades mejoran con el uso.",
+    talentsSub: "Decisiones que pesan: marcan tu forma de vivir la aventura.",
     mastered: "Dominada",
     perk: {
       strength: "+{n} de ataque",
@@ -901,6 +902,8 @@ export const es: Dict = {
     returnBoard: "Entrégala en el tablón de anuncios",
     netWon: "{n}/{total} de oro de beneficio",
     rewardGold: "+{n} de oro",
+    trusted: "el pueblo se fía de ti",
+    distrusted: "la gente no se fía de ti",
     rewardXp: "+{n} EXP",
     rewardTalent: "¡+{n} punto de talento! ({k:skills})",
     paid: "−{n} de oro",
@@ -933,6 +936,8 @@ export const es: Dict = {
   },
 
   farm: {
+    morningRipe: "El huerto ha cundido esta noche. Listo para recoger: {n}.",
+    morningThirsty: "El huerto te espera: riégalo hoy o no crecerá nada ({n} sin regar).",
     till: "Cavar",
     tilledSoil: "la tierra cavada",
     needHoe: "Necesitas una azada para romper esta tierra. (Hob, o la tienda de Mira.)",
@@ -998,6 +1003,7 @@ export const es: Dict = {
     bountyLabel: "Recompensa",
     bounty: {
       added: "La guardia pone {n}g por tu cabeza.",
+      grew: "Aviso de la guardia: una recompensa sin pagar no mengua. Ya van {n}g.",
       stop: "Alto ahí. Últimamente las cosas de los demás acaban en tus bolsillos.",
       amount: "La guardia dice que debes {n} de oro. Paga y aquí no ha pasado nada. Casi nada.",
       pay: "Pagar la multa ({n}g)",
@@ -1019,6 +1025,7 @@ export const es: Dict = {
 
   drunk: {
     hic: "*hip*",
+    hangover: "Resaca. La cabeza te retumba como un tambor y alguien lo está tocando. Hoy solo te ha llegado tres cuartas partes de la energía.",
     tier: { sober: "Serenidad", tipsy: "Con el puntillo", drunk: "Borrachera", wasted: "Cogorza" },
     enter: {
       sober: "Se te despeja la cabeza. El suelo deja de moverse. Casi.",
@@ -1307,9 +1314,9 @@ export const es: Dict = {
     lowers: "Lo baja:",
     lowersList: "robar (sobre todo si te pillan), pegar a los vecinos, trabajos turbios, recompensas sin pagar.",
     group: {
-      village: "Los vecinos. Ayudarles, las misiones y devolver lo que te llevaste te los ganan.",
-      watch: "La guardia. Los robos, las peleas y las multas sin pagar la enfadan; pagar lo arregla.",
-      underworld: "Finn y compañía. Los robos limpios, los trabajos turbios y las apuestas gordas les impresionan. Con +20, Finn te coloca lo robado.",
+      village: "Los vecinos. Ayudarles, las misiones y devolver lo que te llevaste te los ganan. A quien tiene su confianza le tocan los encargos mejor pagados del tablón.",
+      watch: "La guardia. Los robos, las peleas y las multas sin pagar la enfadan; pagar lo arregla. Si te tienen fichado, la gente te vigila las manos, y una recompensa sin pagar crece cada noche.",
+      underworld: "Finn y compañía. Los robos limpios, los trabajos turbios y las apuestas gordas les impresionan. Con +20, Finn te coloca lo robado, y cuanto más te respetan, más ligeros tienes los dedos.",
     },
     bounty: "La guardia te reclama {n} de oro.",
     noBounty: "No hay recompensa por tu cabeza.",

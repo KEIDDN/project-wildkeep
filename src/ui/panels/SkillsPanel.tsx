@@ -38,7 +38,7 @@ export function SkillsPanel() {
   });
   const points = usePlayerStore((s) => talentPoints(s.level, s.talents, s.bonusTalentPoints));
   return (
-    <Panel title={t("skills.title")} subtitle={tab === "talents" ? (points > 0 ? t("talents.points", { n: points }) : t("talents.pointsNone")) : t("skills.grow")} icon="skill_strength" width={tab === "talents" ? 1120 : 620}>
+    <Panel title={t("skills.title")} subtitle={tab === "talents" ? t("skills.talentsSub") : t("skills.grow")} icon="skill_strength" width={tab === "talents" ? 1120 : 620}>
       <div className="tabs">
         <button type="button" className={`tab${tab === "skills" ? " active" : ""}`} onClick={() => setTab("skills")}>
           {t("talents.skillsTab")}

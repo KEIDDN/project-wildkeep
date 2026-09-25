@@ -186,7 +186,7 @@ class CrackedWall extends Entity implements Hittable {
       return;
     }
     // The whole seal comes down together.
-    for (const e of [...this.area.entities]) if (e instanceof CrackedWall && e.roomId === this.roomId) e.crumble(game);
+    for (const e of this.area.entities.slice()) if (e instanceof CrackedWall && e.roomId === this.roomId) e.crumble(game);
     game.ui.pushToast(t("rooms.secretFound"), "levelup", { icon: "key" });
     audio.sfx("rare");
     awardSkillXp("luck", 10);

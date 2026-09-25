@@ -806,7 +806,7 @@ def parse_aseprite(path: Path) -> dict:
     _size, magic, frames, W, H, depth = struct.unpack_from("<IHHHHH", d, 0)
     assert magic == 0xA5E0 and depth == 32
     pos = 128
-    layers, cels = [], []
+    layers, blends, cels = [], [], []
     fsize, _fm, oldc, _dur = struct.unpack_from("<IHHH", d, pos)
     nch = struct.unpack_from("<I", d, pos + 12)[0] or oldc
     p = pos + 16
@@ -814,15 +814,38 @@ def parse_aseprite(path: Path) -> dict:
         csize, ctype = struct.unpack_from("<IH", d, p)
         body = d[p + 6 : p + csize]
         if ctype == 0x2004:
+            blend, opacity = struct.unpack_from("<HB", body, 10)
             ln = struct.unpack_from("<H", body, 16)[0]
             layers.append(body[18 : 18 + ln].decode())
+            blends.append((blend, opacity))
         elif ctype == 0x2005:
             li, x, y, _opa, ct = struct.unpack_from("<HhhBH", body, 0)
             if ct == 2:
                 w, h = struct.unpack_from("<HH", body, 16)
                 cels.append((li, x, y, Image.frombytes("RGBA", (w, h), zlib.decompress(body[20:]))))
         p += csize
-    return {"W": W, "H": H, "layers": layers, "cels": cels}
+    return {"W": W, "H": H, "layers": layers, "blends": blends, "cels": cels}
+
+
+# Aseprite blend mode ids we honour (everything else composites as Normal).
+BLEND_SOFT_LIGHT = 9
+
+
+def soft_light(base: Image.Image, layer: Image.Image, opacity: int) -> Image.Image:
+    """Aseprite's (W3C) soft light: light pixels brighten what's under them,
+    dark ones deepen it. The mockup's window patches and glows are drawn this
+    way; flattening them as Normal left solid white squares on the floor."""
+    import numpy as np
+
+    b = np.asarray(base, dtype=np.float32) / 255.0
+    s = np.asarray(layer, dtype=np.float32) / 255.0
+    cb, cs = b[..., :3], s[..., :3]
+    d = np.where(cb <= 0.25, ((16 * cb - 12) * cb + 4) * cb, np.sqrt(cb))
+    mixed = np.where(cs <= 0.5, cb - (1 - 2 * cs) * cb * (1 - cb), cb + (2 * cs - 1) * (d - cb))
+    a = s[..., 3:4] * (opacity / 255.0)
+    out = b.copy()
+    out[..., :3] = cb * (1 - a) + mixed * a
+    return Image.fromarray(np.clip(out * 255 + 0.5, 0, 255).astype(np.uint8), "RGBA")
 
 
 def layer_image(a: dict, names: list[str]) -> Image.Image:
@@ -830,8 +853,15 @@ def layer_image(a: dict, names: list[str]) -> Image.Image:
     idx = {n: i for i, n in enumerate(a["layers"])}
     wanted = sorted(idx[n] for n in names)
     for li in wanted:
+        blend, opacity = a["blends"][li] if "blends" in a else (0, 255)
         for cli, x, y, ci in a["cels"]:
-            if cli == li:
+            if cli != li:
+                continue
+            if blend == BLEND_SOFT_LIGHT:
+                full = Image.new("RGBA", im.size)
+                full.paste(ci, (x, y))
+                im = soft_light(im, full, opacity)
+            else:
                 im.alpha_composite(ci, (x, y))
     return im
 

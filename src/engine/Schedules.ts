@@ -108,7 +108,7 @@ export class ScheduleDirector {
     }
     this.period = period;
     const area = game.area;
-    for (const e of [...area.entities]) {
+    for (const e of area.entities.slice()) {
       if (!(e instanceof Npc) || !e.def?.schedule || e.removed) continue;
       const target = scheduleSpot(e.def, period);
       if (!target || target === e.spot) continue;

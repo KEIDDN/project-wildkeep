@@ -228,11 +228,24 @@ export function acceptQuest(id: string): void {
   check(id);
 }
 
-function applyReward(r: QuestReward) {
+/**
+ * Gold a quest actually pays. Notice-board contracts pay by reputation: the
+ * village hands its better-paid odd jobs to people it trusts (up to +50%)
+ * and lowballs the ones it doesn't (down to −25%). Story and personal
+ * quests pay what was promised.
+ */
+export function questGold(def: QuestDef): number {
+  const base = def.rewards.gold ?? 0;
+  if (def.kind !== "board" || !base) return base;
+  const v = useSocialStore.getState().rep.village;
+  return Math.max(1, Math.round(base * (1 + (v >= 0 ? v / 200 : v / 400))));
+}
+
+function applyReward(r: QuestReward, gold = r.gold ?? 0) {
   const ui = useUiStore.getState();
-  if (r.gold) {
-    usePlayerStore.getState().earnGold(r.gold);
-    ui.pushToast(t("quests.rewardGold", { n: r.gold }), "gold", { icon: "coin_bag" });
+  if (gold) {
+    usePlayerStore.getState().earnGold(gold);
+    ui.pushToast(t("quests.rewardGold", { n: gold }), "gold", { icon: "coin_bag" });
     audio.sfx("coin");
   }
   if (r.xp) ui.pushToast(t("quests.rewardXp", { n: grantXp(r.xp) }), "info", { icon: "skill_strength" });
@@ -259,7 +272,7 @@ export function completeQuest(id: string): void {
   announcedReady.delete(id);
   audio.sfx("levelup");
   useUiStore.getState().pushToast(t("quests.completed", { title: questText(def).title }), "levelup", { icon: "journal" });
-  applyReward(def.rewards);
+  applyReward(def.rewards, questGold(def));
   if (def.kind === "story" || def.kind === "side") useSocialStore.getState().addDeed("helped");
   gameEvents.emit("questCompleted", { questId: id });
 }

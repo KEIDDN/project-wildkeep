@@ -12,7 +12,7 @@ import { getNpc } from "../../data/npcs";
 import { useTimeStore } from "../../store/timeStore";
 import { npcName } from "../../i18n/content";
 import { audio } from "../../game/audio/AudioManager";
-import { sellItem, shopBuyPrice, shopSellPrice, stolenSellPrice, unsellableReason } from "../../game/actions";
+import { listPrice, sellItem, shopBuyPrice, shopSellPrice, stolenSellPrice, unsellableReason } from "../../game/actions";
 import { buyPriceFactor } from "../../game/social/honor";
 import { gameEvents } from "../../game/events";
 import { Panel } from "../components/Panel";
@@ -45,7 +45,9 @@ export function ShopPanel() {
   const fence = stock === "fence";
   const spec = stock in SPECIALISTS ? SPECIALISTS[stock as SpecialistId] : null;
   const rate = spec?.rate ?? 1;
-  const lines: StockLine[] = fence ? [] : spec ? [...spec.stock] : stock === "merchant" ? merchantStock(merchantId ?? "", day) : STOCKS[stock as keyof typeof STOCKS];
+  const raw: StockLine[] = fence ? [] : spec ? [...spec.stock] : stock === "merchant" ? merchantStock(merchantId ?? "", day) : STOCKS[stock as keyof typeof STOCKS];
+  // Nothing on a counter can be bought and sold straight back for profit.
+  const lines = raw.map((l) => ({ ...l, price: listPrice(l.itemId, l.price) }));
   const canSell = stock === "general" || fence || !!spec;
   const [tab, setTab] = useState<"sell" | "buy">(canSell ? "sell" : "buy");
   const [confirm, setConfirm] = useState<string | null>(null);

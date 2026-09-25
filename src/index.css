@@ -1547,9 +1547,13 @@ kbd {
 .tutorial {
   position: absolute;
   top: 14px;
-  left: 50%;
+  /* Centred, but never over the vitals on the left (portrait + bars end at
+     ~436px) or the clock / gold column on the right (~240px). */
+  --tut-w: min(460px, calc(100vw - 690px));
+  left: max(50%, calc(446px + var(--tut-w) / 2));
   transform: translateX(-50%);
-  width: min(460px, 60vw);
+  width: var(--tut-w);
+  min-width: 300px;
   padding: 8px 14px 10px;
   background: rgba(20, 12, 16, 0.84);
   border: 2px solid #b8862a;

@@ -33,17 +33,24 @@ export interface WeaponProfile {
   heavy: number;
   /** Extra crit chance while wielded. */
   crit: number;
+  /** Forward step per swing (× the combo step's lunge). */
+  lunge: number;
+  /** Weight of each hit: scales hit-stop, shake and camera kick. */
+  impact: number;
+  /** Anticipation: seconds the swing hangs at the top before it falls. */
+  windup: number;
 }
 
 export const WEAPONS: Record<WeaponKind, WeaponProfile> = {
-  sword: { kind: "sword", damageType: "slash", speed: 1, reach: 1, arc: 0.35, damage: 1, knock: 1, poise: 1, combo: [0, 1, 2], cost: 9, heavy: 2.2, crit: 0 },
+  sword: { kind: "sword", damageType: "slash", speed: 1, reach: 1, arc: 0.35, damage: 1, knock: 1, poise: 1, combo: [0, 1, 2], cost: 9, heavy: 2.2, crit: 0, lunge: 1, impact: 1, windup: 0 },
   // Quick, short, loves crits and backstabs; four-hit combo.
-  dagger: { kind: "dagger", damageType: "pierce", speed: 1.4, reach: 0.8, arc: 0.45, damage: 0.72, knock: 0.6, poise: 1, combo: [0, 1, 0, 2], cost: 6, heavy: 1.8, crit: 0.1 },
-  // Slow, wide, crushing; two-hit combo that staggers almost anything.
-  maul: { kind: "maul", damageType: "blunt", speed: 0.72, reach: 1.1, arc: 0.05, damage: 1.55, knock: 1.7, poise: 2, combo: [0, 2], cost: 15, heavy: 2.6, crit: -0.02 },
-  // Long, narrow thrusts: fight from outside their reach.
-  spear: { kind: "spear", damageType: "pierce", speed: 0.92, reach: 1.5, arc: 0.72, damage: 1.05, knock: 1.1, poise: 1, combo: [0, 1, 2], cost: 8, heavy: 2.1, crit: 0.02 },
-  bow: { kind: "bow", damageType: "pierce", speed: 1, reach: 1, arc: 0.35, damage: 1, knock: 0.6, poise: 1, combo: [0], cost: 7, heavy: 1, crit: 0 },
+  dagger: { kind: "dagger", damageType: "pierce", speed: 1.4, reach: 0.8, arc: 0.45, damage: 0.72, knock: 0.6, poise: 1, combo: [0, 1, 0, 2], cost: 6, heavy: 1.8, crit: 0.1, lunge: 0.75, impact: 0.6, windup: 0 },
+  // Slow, wide, crushing; two-hit combo that staggers almost anything. It
+  // hangs at the top of each swing, barely steps, and lands like a door.
+  maul: { kind: "maul", damageType: "blunt", speed: 0.72, reach: 1.1, arc: 0.05, damage: 1.55, knock: 1.7, poise: 2, combo: [0, 2], cost: 15, heavy: 2.6, crit: -0.02, lunge: 0.45, impact: 1.7, windup: 0.12 },
+  // Long, narrow thrusts that step in: fight from outside their reach.
+  spear: { kind: "spear", damageType: "pierce", speed: 0.92, reach: 1.5, arc: 0.72, damage: 1.05, knock: 1.1, poise: 1, combo: [0, 1, 2], cost: 8, heavy: 2.1, crit: 0.02, lunge: 1.6, impact: 0.85, windup: 0 },
+  bow: { kind: "bow", damageType: "pierce", speed: 1, reach: 1, arc: 0.35, damage: 1, knock: 0.6, poise: 1, combo: [0], cost: 7, heavy: 1, crit: 0, lunge: 1, impact: 1, windup: 0 },
 };
 
 /**

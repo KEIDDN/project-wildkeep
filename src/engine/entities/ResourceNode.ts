@@ -209,12 +209,11 @@ export class ResourceNode extends Entity implements Interactable, GatherTarget {
       if (getItem(d.itemId).rarity !== "common" && d.chance !== undefined) game.fx.ring(this.x, this.y - 8, 18, 0xffe27a);
     }
     void dropped;
-    grantXp(2);
-    const player = usePlayerStore.getState();
-    const res = player.gainXp(this.def.xp);
-    if (res.leveledUp) game.combat.levelUp(res.newLevel);
+    // One grant (talents apply, the level-up fanfare fires), and the number
+    // floating up is the number you actually got.
+    const xp = grantXp(this.def.xp + 2);
     awardSkillXp(this.def.skill, this.def.xp * 2);
-    game.fx.text(this.x, this.y - this.full.height - 2, `+${this.def.xp} XP`, 0x9fd8ff, { size: 7 });
+    game.fx.text(this.x, this.y - this.full.height - 2, `+${xp} XP`, 0x9fd8ff, { size: 7 });
     if (double) game.fx.text(this.x, this.y - this.full.height - 11, t("toast.doubleYield"), 0xffe27a, { size: 7, bold: true });
     gameEvents.emit("resourceGathered", { nodeId: this.def.id, skill: this.def.skill });
     game.fx.burst(this.x, this.y - 6, this.def.particles[0], 14, { speed: 60, up: 70 });
