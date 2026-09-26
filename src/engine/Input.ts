@@ -1,12 +1,15 @@
-import { bindingOf, codeOf, type Action } from "../game/input/bindings";
+import { bindingFor, bindingOf, codeOf, type Action } from "../game/input/bindings";
+import { padAimVector, padHeld, padMoveVector, setGameSink, usingGamepad } from "../game/input/gamepad";
 
 /**
- * Keyboard/mouse state for the game loop. Held inputs are polled each frame;
- * one-shot presses are queued so a quick tap between frames isn't lost.
+ * Keyboard, mouse and controller state for the game loop. Held inputs are
+ * polled each frame; one-shot presses are queued so a quick tap between
+ * frames isn't lost.
  *
  * Gameplay reads *actions* (`held("attack")`, `pressed("dodge")`), which
  * resolve through the player's bindings (game/input/bindings.ts). Mouse
- * buttons are plain codes ("mouse0", "mouse2") so they can be bound too.
+ * buttons ("mouse0") and controller buttons ("pad:x") are plain codes too, so
+ * every device can be bound and nothing downstream cares which one it was.
  */
 export class Input {
   private heldCodes = new Set<string>();
@@ -55,6 +58,8 @@ export class Input {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
+    // Controller presses arrive from the gamepad poller (only while no window is open).
+    setGameSink((code) => this.pressedCodes.add(code));
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("keyup", this.onKeyUp);
     window.addEventListener("blur", this.onBlur);
@@ -67,12 +72,17 @@ export class Input {
 
   /** Is the action held right now? */
   held(action: Action): boolean {
-    return bindingOf(action).some((c) => this.heldCodes.has(c));
+    return bindingOf(action).some((c) => this.heldCodes.has(c) || padHeld(c));
   }
 
   /** True once per physical press of any of the action's inputs. */
   pressed(action: Action): boolean {
     return bindingOf(action).some((c) => this.pressedCodes.has(c));
+  }
+
+  /** Eat this frame's press of the action (it was used for something else). */
+  consume(action: Action): void {
+    for (const c of bindingOf(action)) this.pressedCodes.delete(c);
   }
 
   /** Was the action triggered this frame by a mouse button (so it aims at the cursor)? */
@@ -85,8 +95,13 @@ export class Input {
     return this.pressedCodes.has(code);
   }
 
-  /** Movement vector from the four move actions, normalized. */
+  /** Movement vector from the four move actions, normalized. The left stick
+   * (when it's bound to movement) steers in any direction, not just eight. */
   axis(): { x: number; y: number } {
+    if (bindingFor("moveUp", "gamepad").includes("pad:lsup")) {
+      const stick = padMoveVector();
+      if (stick) return stick;
+    }
     let x = 0;
     let y = 0;
     if (this.held("moveUp")) y -= 1;
@@ -95,6 +110,16 @@ export class Input {
     if (this.held("moveRight")) x += 1;
     const len = Math.hypot(x, y);
     return len > 0 ? { x: x / len, y: y / len } : { x: 0, y: 0 };
+  }
+
+  /** Right-stick aim, if it's pushed (null: keep keyboard facing behaviour). */
+  aim(): { x: number; y: number } | null {
+    return padAimVector();
+  }
+
+  /** Is the mouse the thing aiming right now (not a controller left idle over the canvas)? */
+  get mouseAims(): boolean {
+    return this.mouseInside && !usingGamepad();
   }
 
   endFrame(): void {
@@ -107,6 +132,7 @@ export class Input {
   }
 
   destroy(): void {
+    setGameSink(null);
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("blur", this.onBlur);

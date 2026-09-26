@@ -38,6 +38,8 @@ export function ItemIcon({ itemId, quantity, size = 48, selected, equipped, stol
       onPointerDown={onPointerDown}
       onContextMenu={onContextMenu}
       data-drop={dropId}
+      // Only slots that do something are stops for the controller.
+      data-nav={onClick || onDoubleClick || onContextMenu || dropId ? undefined : "off"}
       title={`${name} (${t(`common.rarity.${def.rarity}`)})${stolen ? ` · ${t("inventory.stolenTag")}` : ""}`}
     >
       <img src={`/icons/${def.icon}.png`} alt={name} draggable={false} />
@@ -56,7 +58,7 @@ export function ItemIcon({ itemId, quantity, size = 48, selected, equipped, stol
 
 export function EmptySlot({ size = 48, label, ghost, dropId }: { size?: number; label?: string; ghost?: string; dropId?: string }) {
   return (
-    <div className="slot empty" style={{ width: size, height: size }} data-drop={dropId}>
+    <div className="slot empty" style={{ width: size, height: size }} data-drop={dropId} data-nav={dropId ? "" : undefined}>
       {ghost && <img className="slot-ghost" src={`/icons/${ghost}.png`} alt="" draggable={false} />}
       {label && <span className="slot-label">{label}</span>}
     </div>

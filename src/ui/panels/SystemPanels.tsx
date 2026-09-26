@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUiStore } from "../../store/uiStore";
 import { currentSlot, lastSavedAt, saveGame } from "../../game/save/gameSave";
 import { AudioSettings, LanguageSettings } from "../TitleScreen";
 import { t } from "../../i18n";
 import { useTutorialStore } from "../../store/tutorialStore";
+import { skipTutorial } from "../../game/tutorial";
 import { audio } from "../../game/audio/AudioManager";
 import { Panel } from "../components/Panel";
 import { ControlsSettings } from "./ControlsSettings";
-import { eventIs, keyLabel } from "../../game/input/bindings";
+import { eventIs } from "../../game/input/bindings";
+import { Glyph } from "../components/Glyph";
+import { useNavLayer } from "../nav/padNav";
 
 /** NPC dialogue box: click / E / Space advances, last line may open a panel. */
 export function DialoguePanel() {
@@ -18,6 +21,17 @@ export function DialoguePanel() {
 
   const last = !!dialogue && line >= dialogue.lines.length - 1;
   const choices = last ? (dialogue?.choices ?? []) : [];
+  const ref = useRef<HTMLDivElement>(null);
+  // Controller: ✕ advances; on the last line it picks the focused choice. ○ closes, like Esc.
+  useNavLayer(ref, {
+    autoFocus: choices.length > 0,
+    onConfirm: () => {
+      if (choices.length) return false;
+      advance();
+      return true;
+    },
+    onCancel: () => useUiStore.getState().closePanel(),
+  });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Number keys pick a choice; E/Space only advance when there's nothing to pick.
@@ -57,7 +71,7 @@ export function DialoguePanel() {
   }
 
   return (
-    <div className="dialogue" onClick={() => !choices.length && advance()}>
+    <div className="dialogue" ref={ref} onClick={() => !choices.length && advance()}>
       <div className="dialogue-box">
         {dialogue.portrait && <img className="dialogue-portrait" src={`/icons/${dialogue.portrait}.png`} alt="" />}
         <div className="dialogue-content">
@@ -84,7 +98,7 @@ export function DialoguePanel() {
             </div>
           ) : (
             <div className="dialogue-next">
-              {line < dialogue.lines.length - 1 ? t("dialogue.next") : dialogue.next ? t("dialogue.continue") : t("dialogue.close")} <kbd>{keyLabel("interact")}</kbd>
+              {line < dialogue.lines.length - 1 ? t("dialogue.next") : dialogue.next ? t("dialogue.continue") : t("dialogue.close")} <Glyph action="interact" />
             </div>
           )}
         </div>
@@ -96,10 +110,11 @@ export function DialoguePanel() {
 export function SettingsPanel({ onQuit }: { onQuit: () => void }) {
   const [savedAt, setSavedAt] = useState(() => lastSavedAt());
   const [tab, setTab] = useState<"game" | "controls">("game");
+  const tutorialDone = useTutorialStore((s) => s.completed);
   const slot = currentSlot();
   const open = (panel: "help" | "journal" | "debug") => useUiStore.getState().openPanel(panel);
   return (
-    <Panel title={t("menu.title")} subtitle={t("menu.paused", { slot: slot ?? "-" })} width={tab === "controls" ? 620 : 500}>
+    <Panel title={t("menu.title")} subtitle={t("menu.paused", { slot: slot ?? "-" })} width={tab === "controls" ? 720 : 500}>
       <div className="tabs">
         <button type="button" className={`tab${tab === "game" ? " active" : ""}`} onClick={() => setTab("game")}>
           {t("menu.tabGame")}
@@ -146,6 +161,11 @@ export function SettingsPanel({ onQuit }: { onQuit: () => void }) {
             <button type="button" className="btn btn-small" onClick={() => useTutorialStore.getState().restart()}>
               {t("menu.restartTutorial")}
             </button>
+            {!tutorialDone && (
+              <button type="button" className="btn btn-small" onClick={() => (skipTutorial(), useUiStore.getState().closePanel())}>
+                {t("menu.skipTutorial")}
+              </button>
+            )}
           </div>
           <div className="settings-actions">
             <button type="button" className="btn btn-big" onClick={() => useUiStore.getState().closePanel()}>

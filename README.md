@@ -26,6 +26,22 @@ while fishing) · **G** gift · **Q** potion · **I / Tab** bag · **C** charact
 sheet · **K** skills & talents · **L** journal · **M** world map · **H** help ·
 **Esc** menu. English / Español from Settings.
 
+Controller (DualSense / DualShock, Xbox, generic pads via the browser
+Gamepad API; remappable; one meaning per button everywhere — see
+`DEFAULT_PAD` in `game/input/bindings.ts`): **left stick** move · **□ / X**
+primary action (swing, or work the tree / rock / plot / water in front of you
+when no enemy is close; hold for a heavy) · **△ / Y** heavy blow · **✕ / A**
+interact · **○ / B** dodge · **L1 / LB** parry · **R1 / RB** Whirlwind ·
+**L2 / LT** (or L3) run · **R2 / RT** Spark · **right stick** aim / face ·
+**d-pad** ↑ potion, ↓ gift, ← map, → journal · **Create / View** bag ·
+**touchpad** map · **R3** skills · **Options / Menu** the game menu. In menus:
+d-pad / stick move, ✕ / A choose, ○ / B back (everywhere), □ / X the item's
+options, △ / Y sort (bag), L1 / R1 flip Bag · Character · Skills · Journal ·
+Map · Help · Menu, L2 / R2 a window's own tabs, right stick scrolls. Out of
+combat ○ also puts away a tip card. Prompts are drawn as real glyphs for the
+device in use (`game/input/glyphs.ts`, `ui/components/Glyph.tsx`,
+`engine/fx/glyphMarker.ts` for the marker over things you can use).
+
 ## The loop
 
 Title screen → New Game (3 save slots) → a short intro and a guided first day,
@@ -160,9 +176,13 @@ Systems at a glance (v0.0.6, "RPG depth" pass):
 - **Input** (`game/input/bindings.ts`, `engine/Input.ts`): gameplay reads
   *actions* (`input.held("sprint")`, `input.pressed("parry")`), never keys.
   Bindings live in settings (only overrides are stored); rebinding swaps a
-  taken key; mouse buttons are codes (`mouse0`); a gamepad can add `pad:*`
-  codes later. Text can say `{k:map}` and shows the player's current key
-  (`i18n/index.ts interpolate`, also item and quest text).
+  taken key; mouse buttons are codes (`mouse0`), controller buttons too
+  (`pad:a`, `pad:lsup` — `game/input/gamepad.ts` polls the Gamepad API once a
+  frame and feeds them in; keyboard and pad overrides are stored separately).
+  Text can say `{k:map}` and shows the current key *or button* for the device
+  in use (`{p:a}` is a fixed pad button; `PAD_TEXT` swaps "click" texts);
+  `ui/nav/padNav.ts` drives every window with a controller (each `Panel` is a
+  navigation layer; options add extras like the bag's pick-up / place).
 - **World map** (M, `ui/panels/MapPanel.tsx`): a procedurally painted
   pixel-art map (`ui/map/drawWorldMap.ts`, 256×160 scaled up) with fog over
   the unknown, roads, and regions from `data/world.ts` (visited / open /

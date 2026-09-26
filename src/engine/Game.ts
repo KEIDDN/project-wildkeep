@@ -1,4 +1,4 @@
-import { Application, Container, Culler, Graphics, Text, TextureSource, Ticker } from "pixi.js";
+import { Application, Container, Culler, Graphics, Rectangle, TextureSource, Ticker } from "pixi.js";
 import { Camera } from "./Camera";
 import { Input } from "./Input";
 import { Effects } from "./fx/Effects";
@@ -15,7 +15,7 @@ import { preload, uploadAllTextures } from "./textures";
 import { allAssetPaths } from "./manifestPaths";
 import { CombatSystem } from "./CombatSystem";
 import type { AreaId, Vector2 } from "../game/core/types";
-import { INTERACT_RANGE, TILE, WORLD_FONT } from "../game/core/constants";
+import { INTERACT_RANGE, TILE } from "../game/core/constants";
 import { AREAS } from "../data/areas";
 import { t } from "../i18n";
 import { areaName, areaSubtitle, floorThemeName, itemName, mineBandName } from "../i18n/content";
@@ -34,7 +34,7 @@ import { grantItems, grantXp, quickDrinkPotion } from "../game/actions";
 import { gameEvents } from "../game/events";
 import { GAME_MINUTES_PER_SECOND, daylight } from "../game/time/clock";
 import { useTimeStore } from "../store/timeStore";
-import { currentTutorialStep } from "../store/tutorialStore";
+import { currentTutorialStep, useTutorialStore } from "../store/tutorialStore";
 import { houseLevelInfo } from "../data/house";
 import { currentHouseLevel } from "../game/systems/playerStats";
 import { saveGame } from "../game/save/gameSave";
@@ -44,6 +44,9 @@ import { gardenStatus, initFarming } from "../game/farming";
 import { giftDialogue } from "../game/relationships";
 import { drunkLevel, initDrink, morningAfter } from "../game/tavern/drink";
 import { Npc } from "./entities/Props";
+import { Chest } from "./entities/Chest";
+import { Lake } from "./entities/Lake";
+import { NoticeBoard } from "./world/questSpawns";
 import { isMarketDay } from "./world/happenings";
 import { placeQuestItems } from "./world/questSpawns";
 import { usePlayerStore } from "../store/playerStore";
@@ -52,6 +55,9 @@ import { useWorldStore, type TravelRequest } from "../store/worldStore";
 import { useDungeonStore } from "../store/dungeonStore";
 import { useUiStore, type PanelId } from "../store/uiStore";
 import { isCapturingInput } from "../game/input/capture";
+import { RUMBLE, usingGamepad } from "../game/input/gamepad";
+import { glyphKey, glyphOfAction } from "../game/input/glyphs";
+import { drawGlyph } from "./fx/glyphMarker";
 import { refillEnergy, spendEnergy } from "../game/systems/vitals";
 import { showTutorial } from "../game/tutorial";
 import { useSocialStore } from "../store/socialStore";
@@ -66,6 +72,17 @@ import { removeFromStacks } from "../store/inventoryStore";
  * player, camera, lighting and effects. React never touches any of this; it
  * reads and writes Zustand stores, and the Game reacts to those.
  */
+export interface LocalMap {
+  area: AreaId;
+  width: number;
+  height: number;
+  image: HTMLCanvasElement | null;
+  explored: { cols: number; rows: number; cells: Uint8Array };
+  player: { x: number; y: number; fx: number; fy: number };
+  exits: { x: number; y: number; label: string }[];
+  pois: { x: number; y: number; kind: "npc" | "chest" | "water" | "board"; label?: string }[];
+}
+
 export class Game {
   app!: Application;
   camera = new Camera();
@@ -309,6 +326,9 @@ export class Game {
       if (!e.removed) e.syncView();
     }
 
+    const combat = this.enemyNear(170);
+    if (combat !== this.ui.combat) useUiStore.setState({ combat });
+
     if (!blocked) {
       this.checkTriggers();
       this.updateInteraction();
@@ -353,7 +373,8 @@ export class Game {
     const input = this.input;
     // The Controls screen is listening for a new key: don't act on it.
     if (isCapturingInput()) return;
-    if (input.codePressed("escape")) {
+    // Options / Start behaves exactly like Escape (menus route it themselves).
+    if (input.codePressed("escape") || input.codePressed("pad:start")) {
       if (ui.activePanel && ui.activePanel !== "death" && ui.activePanel !== "intro") ui.closePanel();
       else if (!ui.activePanel) ui.openPanel("settings");
       return;
@@ -375,6 +396,14 @@ export class Game {
       return;
     }
     if (blocked) return;
+    // Controller: ○ puts away a tip card while you're not fighting (in a
+    // fight it's a dodge, and tips don't show then anyway).
+    // Only when you're simply standing about: fishing, gathering etc. keep ○.
+    if (usingGamepad() && input.pressed("dodge") && !ui.combat && this.player.state === "free" && useSettingsStore.getState().tips && useTutorialStore.getState().queue[0]) {
+      useTutorialStore.getState().dismissTip();
+      input.consume("dodge");
+      audio.sfx("ui");
+    }
     if (input.pressed("potion")) {
       const healed = quickDrinkPotion();
       if (healed > 0) {
@@ -388,12 +417,17 @@ export class Game {
       this.ui.showDialogue(giftDialogue(this.focused.def.id));
       return;
     }
-    // Fishing: interact strikes (or reels in).
-    if (input.pressed("interact") && this.player.state === "fish") {
+    // The primary action is also the tool: at a tree, rock, plot or water with
+    // nobody to fight, □ / Space works it exactly like interact would.
+    const tool = this.focused?.toolTarget && !this.player.busy && !input.pressedByMouse("attack") && input.pressed("attack") && !this.enemyNear(80);
+    if (tool) input.consume("attack");
+    // Fishing: interact (or the primary action, which cast the line) strikes.
+    if ((input.pressed("interact") || input.pressed("attack")) && this.player.state === "fish") {
+      input.consume("attack");
       this.player.fishingInput(this);
       return;
     }
-    if (input.pressed("interact") && this.focused && !this.player.busy) {
+    if ((input.pressed("interact") || tool) && this.focused && !this.player.busy) {
       const target = this.focused;
       const p = target.prompt(this);
       if (p?.blocked && !p.selfHandled) {
@@ -404,6 +438,12 @@ export class Game {
         gameEvents.emit("interacted", { what: target.constructor.name });
       }
     }
+  }
+
+  /** A live enemy within `r` px of you? */
+  enemyNear(r: number): boolean {
+    const p = this.player;
+    return this.enemies().some((e) => Math.hypot(e.x - p.x, e.y - p.y) < r);
   }
 
   private checkTriggers() {
@@ -457,6 +497,7 @@ export class Game {
     this.ui.setPrompt(prompt);
     this.promptMarker.visible = !!it;
     if (it) {
+      this.buildPromptMarker();
       const bob = Math.round(Math.sin(this.time * 5) * 1.5);
       this.promptMarker.position.set(Math.round(it.interactX), Math.round(this.markerY(it) + bob));
       this.promptMarker.alpha = prompt?.blocked ? 0.5 : 1;
@@ -473,15 +514,17 @@ export class Game {
     return y;
   }
 
+  private markerGlyph = "";
+
+  /** The button over whatever you can use: the interact input on the device
+   * in use (✕ / A on a controller, E on the keyboard…), redrawn when that changes. */
   private buildPromptMarker() {
-    const g = new Graphics();
-    g.roundRect(-5, -6, 10, 10, 2).fill(0x1a1016);
-    g.roundRect(-4, -5, 8, 8, 1).fill(0xf1e0c0);
-    const t = new Text({ text: "E", style: { fontFamily: WORLD_FONT, fontSize: 7, fill: 0x2a1a20, fontWeight: "700" }, resolution: 8 });
-    t.anchor.set(0.5);
-    t.position.set(0, -1.5);
-    this.promptMarker.addChild(g, t);
-    this.promptMarker.visible = false;
+    const g = glyphOfAction("interact");
+    const key = glyphKey(g);
+    if (key === this.markerGlyph) return;
+    this.markerGlyph = key;
+    for (const c of this.promptMarker.removeChildren()) c.destroy({ children: true });
+    this.promptMarker.addChild(drawGlyph(g));
   }
 
   private passiveRegen(dt: number) {
@@ -556,17 +599,22 @@ export class Game {
   private swayT = 0;
 
   /** The world sways and blurs when you've had a few; at 100 you pass out. */
+  /**
+   * How the world looks with a few in you. Noticeable, never in the way:
+   * tipsy is a warm glow and a lazy drift; drunk sways a little more; only
+   * wasted gets the faintest soft focus. (Sharp pixels stay sharp otherwise.)
+   */
   private drunkView(dt: number): number {
     const d = drunkLevel();
-    const blur = d >= 50 ? Math.round(((d - 40) / 60) * 10) / 10 : 0;
-    if (blur !== this.drunkBlur) {
-      this.drunkBlur = blur;
-      this.app.canvas.style.filter = blur > 0 ? `blur(${blur}px) saturate(1.25)` : "";
+    const tier = d >= 80 ? 3 : d >= 50 ? 2 : d >= 25 ? 1 : 0;
+    if (tier !== this.drunkBlur) {
+      this.drunkBlur = tier;
+      this.app.canvas.style.filter = ["", "saturate(1.12) sepia(0.06)", "saturate(1.2) sepia(0.1)", "saturate(1.25) sepia(0.12) blur(0.3px)"][tier];
     }
     if (d >= 100 && !this.transitioning && this.player.state !== "dead") void this.passOut();
-    if (d < 25) return 0;
+    if (!tier) return 0;
     this.swayT += dt;
-    return Math.sin(this.swayT * 1.3) * ((d - 20) / 80) * 10;
+    return Math.sin(this.swayT * 0.9) * [0, 2, 4, 6][tier];
   }
 
   /** Too much. Everything goes dark, and it's morning, and you're home, and… */
@@ -635,7 +683,83 @@ export class Game {
   // Tutorial guidance
   // ---------------------------------------------------------------------------
 
+  /** Where you've walked in this area (32px cells), for the "Here" map's fog.
+   * Per built area: a regenerated forest starts unexplored again. */
+  private explored = new WeakMap<Area, { cols: number; rows: number; cells: Uint8Array }>();
+
+  private markExplored() {
+    const a = this.area;
+    let e = this.explored.get(a);
+    if (!e) {
+      const cols = Math.ceil(a.width / 32);
+      const rows = Math.ceil(a.height / 32);
+      e = { cols, rows, cells: new Uint8Array(cols * rows) };
+      this.explored.set(a, e);
+    }
+    const cx = Math.floor(this.player.x / 32);
+    const cy = Math.floor(this.player.y / 32);
+    const R = 7;
+    for (let y = cy - R; y <= cy + R; y++)
+      for (let x = cx - R; x <= cx + R; x++) {
+        if (x < 0 || y < 0 || x >= e.cols || y >= e.rows || (x - cx) ** 2 + (y - cy) ** 2 > R * R) continue;
+        e.cells[y * e.cols + x] = 1;
+      }
+  }
+
+  /**
+   * A small picture of the area you're in for the map's "Here" sheet: the
+   * real ground (rendered once, small), what you've explored, exits and a few
+   * landmarks you've seen, and you with your facing. Orientation, not a GPS:
+   * nothing unexplored is revealed.
+   */
+  localMap(maxPx = 560): LocalMap | null {
+    if (!this.area || !this.app?.renderer) return null;
+    const a = this.area;
+    const scale = Math.min(0.5, maxPx / Math.max(a.width, a.height));
+    // The culler hides what's off-screen; the snapshot needs all of it.
+    const unCull = (c: Container) => {
+      c.culled = false;
+      for (const ch of c.children) unCull(ch as Container);
+    };
+    unCull(a.root);
+    const prevPlayer = this.player.view.visible;
+    this.player.view.visible = false;
+    let image: HTMLCanvasElement | null = null;
+    try {
+      image = this.app.renderer.extract.canvas({ target: a.root, frame: new Rectangle(0, 0, a.width, a.height), resolution: scale }) as HTMLCanvasElement;
+    } catch {
+      image = null;
+    }
+    this.player.view.visible = prevPlayer;
+    this.markExplored();
+    const ex = this.explored.get(a)!;
+    const seen = (x: number, y: number) => ex.cells[Math.floor(y / 32) * ex.cols + Math.floor(x / 32)] === 1;
+    const pois: LocalMap["pois"] = [];
+    for (const e of a.entities) {
+      if (e.removed || !seen(e.x, e.y)) continue;
+      if (e instanceof Npc && e.def) pois.push({ x: e.x, y: e.y, kind: "npc", label: e.displayName });
+      else if (e instanceof Chest) pois.push({ x: e.x, y: e.y, kind: "chest" });
+      else if (e instanceof Lake) pois.push({ x: e.x, y: e.y, kind: "water" });
+      else if (e instanceof NoticeBoard) pois.push({ x: e.x, y: e.y, kind: "board" });
+    }
+    const exits = a.triggers
+      .filter((t) => seen(t.rect.x + t.rect.w / 2, t.rect.y + t.rect.h / 2))
+      .map((t) => ({ x: t.rect.x + t.rect.w / 2, y: t.rect.y + t.rect.h / 2, label: areaName(t.travel.area) }));
+    const f = this.player.facingVector();
+    return {
+      area: a.id,
+      width: a.width,
+      height: a.height,
+      image,
+      explored: ex,
+      player: { x: this.player.x, y: this.player.y, fx: f.x, fy: f.y },
+      exits,
+      pois,
+    };
+  }
+
   private trackMovement() {
+    this.markExplored();
     const d = Math.hypot(this.player.x - this.lastPlayerPos.x, this.player.y - this.lastPlayerPos.y);
     this.lastPlayerPos = { x: this.player.x, y: this.player.y };
     if (d > 0 && d < 40) {
@@ -833,9 +957,13 @@ export class Game {
   onEnemyKilled(enemy: Enemy): void {
     this.combat.rewardKill(enemy);
     // Last one standing nearby: a beat of slow motion to savour it.
-    if (!enemy.isBoss && !enemy.summoned && !this.enemies().some((e) => e !== enemy && Math.hypot(e.x - enemy.x, e.y - enemy.y) < 140)) this.hitStop(110);
+    if (!enemy.isBoss && !enemy.summoned && !this.enemies().some((e) => e !== enemy && Math.hypot(e.x - enemy.x, e.y - enemy.y) < 140)) {
+      this.hitStop(110);
+      RUMBLE.bigHit();
+    }
     rememberWildKill(enemy.spawnId);
     useWorldStore.getState().bumpStat("enemiesSlain");
+    if (enemy.rank === "boss") RUMBLE.finale();
     gameEvents.emit("enemyKilled", { enemyId: enemy.def.id, boss: enemy.rank === "boss" });
     if (enemy.rank === "boss") {
       useWorldStore.getState().recordBoss(enemy.def.id);

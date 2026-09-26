@@ -233,7 +233,7 @@ export const ES_NPCS: ContentTable["npcs"] = {
     },
   },
   rattles: {
-    name: "Traquetes",
+    name: "Rattles",
     talk: [
       ["¡Buenas noches! Tú ni caso. Vengo por el ambiente. No tengo pulmones, pero el ambiente me gusta."],
       ["Le pido carta a Silas y me dice que no tengo carne donde darme. Todas las noches. Todas las noches el mismo chiste."],
@@ -277,7 +277,7 @@ export const ES_NPCS: ContentTable["npcs"] = {
     name: "Grisby el Buhonero",
     talk: [
       ["¡Un cliente! ¡Uno de verdad! Todo auténtico, todo legal, todo *mío*.", "¿Que de dónde lo he sacado? Me lo encontré. ¿Que dónde? Al lado de su dueño."],
-      ["Sí, soy un trasgo. Sí, mis primos están en el Túmulo intentando apuñalarte. No nos hablamos. La familia, ya sabes."],
+      ["Sí, soy un goblin. Sí, mis primos están en el Túmulo intentando apuñalarte. No nos hablamos. La familia, ya sabes."],
       ["¿Esa poción? La he probado yo mismo. Bueno, se la di a Nargle. Nargle está bien. Nargle está *casi* bien."],
     ],
     lines: { hit: ["¡EH! ¡Que tengo *licencia*! ¡En algún sitio!"] },
@@ -381,7 +381,7 @@ export const ES_NPCS: ContentTable["npcs"] = {
     talk: [
       ["Nabos, te lo digo yo. El futuro son los nabos. Todo el mundo se ríe hasta que llega un asedio y se están comiendo MIS nabos."],
       ["Mags dice que mis zanahorias son «agresivamente naranjas». Que diga lo que quiera. Desde ALLÍ."],
-      ["Algo se come las lechugas por la noche. Tengo tres sospechosos: un conejo, un trasgo o Hob."],
+      ["Algo se come las lechugas por la noche. Tengo tres sospechosos: un conejo, un goblin o Hob."],
     ],
   },
   mags: {
@@ -458,7 +458,7 @@ export const ES_NPCS: ContentTable["npcs"] = {
     ],
   },
   dice_goblin: {
-    name: "Trasgo tahúr",
+    name: "Goblin tahúr",
     talk: [
       ["¡Eh! ¡Tú! ¡Sí, tú! Estamos en el descanso. Normas del sindicato. En el descanso no se apuñala.", "¿Te echas una tirada? Diez de oro. Si sacas más que nosotros, te llevas veinticinco. Es muy justo. Lo hemos comprobado."],
       ["No le digas al Caudillo que tenemos dados. Se cree que estamos «patrullando». Y ESTAMOS patrullando. Sentados."],

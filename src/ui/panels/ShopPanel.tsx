@@ -1,3 +1,4 @@
+import { RichText } from "../components/Glyph";
 import { SPECIALISTS, type SpecialistId } from "../../data/shops";
 import { useEffect, useRef, useState } from "react";
 import { useInventoryStore } from "../../store/inventoryStore";
@@ -117,7 +118,14 @@ export function ShopPanel() {
   const subtitle = fence ? t("rep.fence.subtitle") : spec ? t(stock === "hunter" ? "shop.hunterSubtitle" : stock === "kitchen" ? "shop.kitchenSubtitle" : "shop.anglerSubtitle") : merchant ? t("shop.merchantToday") : stock === "general" ? t("shop.subtitle") : stock === "travelling" ? t("worldEvent.merchant.desc") : t("worldEvent.stranger.desc");
 
   return (
-    <Panel title={title} subtitle={subtitle} icon="coin_bag" width={660}>
+    <Panel
+      title={title}
+      subtitle={subtitle}
+      icon="coin_bag"
+      width={660}
+      // Controller: start on the first item's button, never on "sell all".
+      nav={{ initial: () => document.querySelector<HTMLElement>(".panel .row-list .shop-row .btn") }}
+    >
       <div className="shop-header">
         <div className="tabs">
           {canSell && (
@@ -194,7 +202,7 @@ export function ShopPanel() {
                     <span style={{ color: RARITY_INK[def.rarity] }}>
                       {itemName(itemId)} {deal && <span className="deal-tag">{t("shop.deal")}</span>}
                     </span>
-                    <small>{itemDesc(itemId)}</small>
+                    <small><RichText text={itemDesc(itemId, true)} /></small>
                   </div>
                   <button type="button" className="btn btn-small price-btn" disabled={!afford} title={afford ? undefined : t("shop.cantAfford")} onClick={() => buy(itemId, price)}>
                     <img src="/icons/gold_coin.png" alt="" /> {fmt(price)}

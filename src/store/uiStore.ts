@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Rarity } from "../game/core/types";
+import type { Action } from "../game/input/bindings";
 
 export type PanelId =
   | "inventory"
@@ -71,8 +72,9 @@ export interface InteractionPrompt {
   verb: string;
   target: string;
   blocked?: string; // reason it can't be done (e.g. "Needs an Iron Pickaxe")
-  /** A second action on another key (G: give a gift). */
-  alt?: { key: string; label: string };
+  /** A second action on another key (G: give a gift). Stored as the action so
+   * the hint follows remaps and keyboard ↔ controller switches. */
+  alt?: { action: Action; label: string };
   /** The target explains its own block when used (resource nodes shake and
    * say which tool they need), so E still goes to it. */
   selfHandled?: boolean;
@@ -88,6 +90,8 @@ interface UiState {
   areaBanner: { title: string; subtitle?: string; id: number } | null;
   bossBar: { name: string; hp: number; maxHp: number } | null;
   fading: boolean;
+  /** Enemies close by (set by the game): tips wait, the HUD stays clear. */
+  combat: boolean;
 
   openPanel: (panel: PanelId, data?: Record<string, unknown>) => void;
   closePanel: () => void;
@@ -115,6 +119,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   areaBanner: null,
   bossBar: null,
   fading: false,
+  combat: false,
 
   openPanel: (panel, data = {}) => set({ activePanel: panel, panelData: data }),
   closePanel: () => set({ activePanel: null, panelData: {}, dialogue: get().activePanel === "dialogue" ? null : get().dialogue }),

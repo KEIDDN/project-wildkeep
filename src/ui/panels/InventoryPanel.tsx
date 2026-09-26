@@ -1,6 +1,7 @@
+import { RichText } from "../components/Glyph";
 import { durabilityOf, maxDurability, wearState } from "../../game/systems/durability";
 import { getGame } from "../../engine/gameInstance";
-import { useCallback, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useInventoryStore } from "../../store/inventoryStore";
 import { usePlayerStore } from "../../store/playerStore";
 import { useSocialStore } from "../../store/socialStore";
@@ -25,7 +26,9 @@ import { audio } from "../../game/audio/AudioManager";
 import { CROP_BY_SEED } from "../../data/crops";
 import { selectSeed } from "../../game/farming";
 import { bagLayout, BAG_MIN_SLOTS, type SortMode } from "../../game/inventoryLayout";
-import { beginItemDrag, DragGhost, useDraggedItem } from "../components/DragItem";
+import { beginCarry, beginItemDrag, cancelCarry, carrying, carryTo, dropCarry, DragGhost, useDraggedItem, type DragSpec } from "../components/DragItem";
+import { navFocus, type NavOptions } from "../nav/padNav";
+import { usingGamepad } from "../../game/input/gamepad";
 import { ContextMenu, type MenuAction, type MenuState } from "../components/ContextMenu";
 
 export { sortStacks } from "../../game/inventoryLayout";
@@ -87,12 +90,12 @@ export function InventoryPanel() {
     else if (def.healAmount || def.energy || def.mana) consumeFood(def.id);
     else if (def.useEffect) useUtilityItem(def.id);
   };
-  // ---- drag & drop ------------------------------------------------------------
-  const dragFromBag = (e: ReactPointerEvent, index: number) => {
+  // ---- drag & drop (mouse drags and controller carries share these rules) ------
+  const bagSpec = (index: number): DragSpec | null => {
     const s = useInventoryStore.getState().stacks[index];
-    if (!s) return;
+    if (!s) return null;
     const def = getItem(s.itemId);
-    beginItemDrag(e, {
+    return {
       itemId: s.itemId,
       quantity: s.quantity,
       accepts: (target) => target.startsWith("bag:") || target === `equip:${def.equipSlot}`,
@@ -106,10 +109,13 @@ export function InventoryPanel() {
         if (r !== "none") audio.sfx(r === "merged" ? "coin" : "ui", { pitch: r === "merged" ? 1.3 : 1.1 });
       },
       onReject: (target) => deny(target.startsWith("equip:") ? t("inventory.wrongSlot") : undefined),
-    });
+    };
   };
-  const dragFromDoll = (e: ReactPointerEvent, slot: EquipSlot, id: string) => {
-    beginItemDrag(e, {
+  const dragFromBag = (e: ReactPointerEvent, index: number) => {
+    const spec = bagSpec(index);
+    if (spec) beginItemDrag(e, spec);
+  };
+  const dollSpec = (slot: EquipSlot, id: string): DragSpec => ({
       itemId: id,
       accepts: (target) => target.startsWith("bag:"),
       onDrop: (target) => {
@@ -125,7 +131,12 @@ export function InventoryPanel() {
         if (after.stacks[back]?.itemId === id) after.moveToSlot(back, to);
         setSelected(null);
       },
-    });
+  });
+  const dragFromDoll = (e: ReactPointerEvent, slot: EquipSlot, id: string) => beginItemDrag(e, dollSpec(slot, id));
+  const carry = (spec: DragSpec | null) => {
+    if (!spec) return;
+    beginCarry(spec, navFocus());
+    audio.sfx("ui", { pitch: 1.2 });
   };
 
   // ---- right-click ------------------------------------------------------------
@@ -155,6 +166,8 @@ export function InventoryPanel() {
       });
     if (def.stackable && s.quantity > 1) actions.push({ label: t("inventory.action.split"), onSelect: () => useInventoryStore.getState().splitStack(index) });
     actions.push({ label: t("inventory.action.inspect"), onSelect: () => setSelected({ itemId: s.itemId, from: "bag", stolen: s.stolen, index }) });
+    // No dragging on a controller: lift it and carry it to another slot instead.
+    if (usingGamepad()) actions.push({ label: t("pad.carry"), onSelect: () => carry(bagSpec(index)) });
     setSelected({ itemId: s.itemId, from: "bag", stolen: s.stolen, index });
     setMenu({ x: e.clientX, y: e.clientY, title: itemName(def.id), actions });
   };
@@ -168,6 +181,7 @@ export function InventoryPanel() {
       actions: [
         { label: t("inventory.action.unequip"), primary: true, onSelect: () => (unequipSlot(slot), setSelected(null)) },
         { label: t("inventory.action.inspect"), onSelect: () => setSelected({ itemId: id, from: slot }) },
+        ...(usingGamepad() ? [{ label: t("pad.carry"), onSelect: () => carry(dollSpec(slot, id)) }] : []),
       ],
     });
   };
@@ -179,6 +193,60 @@ export function InventoryPanel() {
       actions: SORT_MODES.map((m) => ({ label: t(`inventory.sort.${m}`), onSelect: () => sortBag(m) })),
     });
   };
+  // ---- controller -------------------------------------------------------------
+  const sortIndex = useRef(-1);
+  // Closing the bag mid-carry puts the item back.
+  useEffect(() => cancelCarry, []);
+  const nav: NavOptions = {
+    initial: () => document.querySelector<HTMLElement>(".bag-grid [data-drop]"),
+    onFocus: (el) => {
+      if (carrying()) return carryTo(el);
+      // Resting on a slot shows its details, like a click.
+      if (el instanceof HTMLButtonElement && el.matches(".slot[data-drop]")) el.click();
+    },
+    onConfirm: (el) => {
+      if (carrying()) {
+        if (dropCarry(el)) audio.sfx("ui", { pitch: 1.1 });
+        return true;
+      }
+      // ✕ on a slot = its main action (the double-click): equip, use, eat, unequip.
+      if (el?.matches(".slot[data-drop]")) {
+        el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+        return true;
+      }
+      return false;
+    },
+    onCancel: () => {
+      if (carrying()) {
+        cancelCarry();
+        audio.sfx("ui", { pitch: 0.8 });
+      } else {
+        audio.sfx("ui");
+        useUiStore.getState().closePanel();
+      }
+    },
+    onButton: (code) => {
+      if (carrying()) return true;
+      if (code !== "pad:y") return false;
+      // △ / Y sorts; again for the next way of sorting.
+      sortIndex.current = (sortIndex.current + 1) % SORT_MODES.length;
+      const mode = SORT_MODES[sortIndex.current];
+      sortBag(mode);
+      useUiStore.getState().pushToast(`${t("inventory.sort.button")}: ${t(`inventory.sort.${mode}`)}`, "info");
+      return true;
+    },
+    hints: () =>
+      carrying()
+        ? [
+            { codes: ["pad:a"], label: t("pad.place") },
+            { codes: ["pad:b"], label: t("pad.drop") },
+          ]
+        : [
+            { codes: ["pad:x"], label: t("pad.options") },
+            { codes: ["pad:y"], label: t("pad.sort") },
+          ],
+  };
+
   const sortBag = (mode: SortMode) => {
     useInventoryStore.getState().sortBag(mode);
     audio.sfx("ui", { pitch: 0.9 });
@@ -197,7 +265,7 @@ export function InventoryPanel() {
   };
 
   return (
-    <Panel title={t("inventory.title")} subtitle={t("inventory.subtitle", { n: level })} icon="chest" width={800}>
+    <Panel title={t("inventory.title")} subtitle={t("inventory.subtitle", { n: level })} icon="chest" width={800} nav={nav}>
       <div className="inv-layout">
         <div className="inv-left">
           <div className="section-title">{t("inventory.doll")}</div>
@@ -403,7 +471,7 @@ export function ItemDetail({ def, equipped, stolen, onAct, dur }: { def: ItemDef
           {def.keyItem && <span className="tag tag-key">{t("inventory.keyItem")}</span>}
           {stolen && <span className="tag tag-stolen">{t("inventory.stolenTag")}</span>}
         </div>
-        <div className="detail-desc">{itemDesc(def.id)}</div>
+        <div className="detail-desc"><RichText text={itemDesc(def.id, true)} /></div>
         {bonuses.length > 0 && <div className="detail-bonus">{bonuses.join(" · ")}</div>}
         {weaponLine(def) && <div className="detail-weapon">{weaponLine(def)}</div>}
         {maxDur > 0 && (

@@ -16,6 +16,11 @@ export interface Settings {
   tips: boolean;
   /** Remapped controls (only the actions the player changed). */
   bindings: Partial<Record<Action, string[]>>;
+  /** Remapped controller buttons, kept apart so keyboard and pad remaps never
+   * clobber each other (an empty list = deliberately unbound). */
+  padBindings: Partial<Record<Action, string[]>>;
+  /** Controller rumble (where the browser supports it). */
+  vibration: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -28,6 +33,8 @@ const DEFAULTS: Settings = {
   showFps: false,
   tips: true,
   bindings: {},
+  padBindings: {},
+  vibration: true,
 };
 
 function loadSettings(): Settings {

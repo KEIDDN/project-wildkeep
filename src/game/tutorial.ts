@@ -23,6 +23,18 @@ import type { AreaId } from "./core/types";
  *  - First-day objectives: a short guided chain, each step completed by a
  *    game event, shown as one line at the top of the screen.
  */
+/**
+ * Skipping the introduction only stops the guiding: nothing in it is
+ * exclusive (tools are sold at Mira's, the garden is Hob's quest, Bram's job
+ * stays on offer). Point at the journal, where the open jobs live.
+ */
+export function skipTutorial(): void {
+  useTutorialStore.getState().skip();
+  useUiStore.getState().pushToast(t("tutorial.skipped"), "info", { icon: "journal" });
+  showTutorial("journal");
+  saveGame();
+}
+
 export function showTutorial(topic: HelpTopicId): void {
   useTutorialStore.getState().show(topic);
 }

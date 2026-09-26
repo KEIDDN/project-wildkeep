@@ -28,6 +28,9 @@ import { startMusicDirector } from "./game/audio/musicDirector";
 import { audio } from "./game/audio/AudioManager";
 import { useTimeStore } from "./store/timeStore";
 import { announceEvent, rollDailyEvent } from "./game/social/worldEvents";
+import { onPadConnection, useInputDevice } from "./game/input/gamepad";
+import { PadHints } from "./ui/nav/PadHints";
+import { t } from "./i18n";
 
 /**
  * Two screens: the title (new game / load / settings / credits) and the
@@ -54,6 +57,9 @@ function GameScreen({ onQuit }: { onQuit: () => void }) {
   const activePanel = useUiStore((s) => s.activePanel);
   // Switching language re-renders every panel (the world keeps running).
   const lang = useLanguage();
+  // Picking up the controller (or the keyboard) re-renders every prompt with
+  // the right glyphs; nothing is remounted, so open windows keep their state.
+  useInputDevice();
 
   useEffect(() => {
     const stopTutorial = startTutorial();
@@ -66,6 +72,12 @@ function GameScreen({ onQuit }: { onQuit: () => void }) {
       const ev = rollDailyEvent();
       if (ev) setTimeout(() => announceEvent(ev), 1200);
     });
+    const stopPad = onPadConnection(({ connected, name, remaining, wasInUse }) => {
+      const ui = useUiStore.getState();
+      ui.pushToast(t(connected ? "pad.connected" : "pad.disconnected", { name }), connected ? "info" : "warning");
+      // Lost the only controller mid-fight: pause rather than leave you standing there.
+      if (!connected && !remaining && wasInUse && !ui.activePanel) ui.openPanel("settings");
+    });
     const autosave = setInterval(saveGame, 15000);
     const onUnload = () => saveGame();
     window.addEventListener("beforeunload", onUnload);
@@ -73,6 +85,7 @@ function GameScreen({ onQuit }: { onQuit: () => void }) {
       stopTutorial();
       stopMusic();
       stopEvents();
+      stopPad();
       audio.stopMusic(0.8);
       clearInterval(autosave);
       window.removeEventListener("beforeunload", onUnload);
@@ -114,6 +127,7 @@ function GameScreen({ onQuit }: { onQuit: () => void }) {
         {activePanel === "debug" && import.meta.env.DEV && <DebugPanel />}
         <IntroOverlay />
         <FadeOverlay />
+        <PadHints />
       </div>
     </div>
   );

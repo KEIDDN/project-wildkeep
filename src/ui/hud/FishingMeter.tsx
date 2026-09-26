@@ -1,6 +1,7 @@
+import { RichText } from "../components/Glyph";
 import { useEffect, useRef, useState } from "react";
 import { getGame } from "../../engine/gameInstance";
-import { t } from "../../i18n";
+import { t, tr } from "../../i18n";
 
 /**
  * The tug: line tension (needle over a green zone), how close the fish is
@@ -74,7 +75,7 @@ export function FishingMeter() {
       <div className="fish-progress">
         <div ref={progress} />
       </div>
-      <div className="fish-hint">{t("fish.hint")}</div>
+      <div className="fish-hint"><RichText text={tr("fish.hint")} /></div>
     </div>
   );
 }

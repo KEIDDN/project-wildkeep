@@ -7,12 +7,12 @@ export const ES_QUESTS: Record<string, QuestText> = {
     summary: "El aprendiz de Dorrin le llevaba a Bram una caja de hierro por el Bosque Susurrante. Volvió sin la caja, sin el carro y sin la bota izquierda.",
     offer: [
       "Tú. Sí, tú. Tienes piernas y espada, que es más de lo que tiene mi proveedor.",
-      "El chaval de Dorrin me traía una caja de hierro por el Bosque Susurrante. Volvió blanco como la harina, sin caja y con una bota. Dice que trasgos.",
+      "El chaval de Dorrin me traía una caja de hierro por el Bosque Susurrante. Volvió blanco como la harina, sin caja y con una bota. Dice que goblins.",
       "Encuentra esa caja y te pago, y con parte del hierro te forjo algo. ¿Trato?",
     ],
     stages: ["Encuentra la caja de hierro en el Bosque Susurrante", "Llévale la caja a Bram"],
-    remind: ["La caja está por el Bosque Susurrante. Busca trasgos con cara de satisfacción."],
-    complete: ["¡Mi hierro! Los trasgos ni la han abierto. No saben leer las etiquetas, benditos.", "Toma. Tu paga y tres lingotes de lo alto de la caja. No te lo gastes todo en la ruleta."],
+    remind: ["La caja está por el Bosque Susurrante. Busca goblins con cara de satisfacción."],
+    complete: ["¡Mi hierro! Los goblins ni la han abierto. No saben leer las etiquetas, benditos.", "Toma. Tu paga y tres lingotes de lo alto de la caja. No te lo gastes todo en la ruleta."],
   },
   greta_tab: {
     title: "La cuenta de Barnaby",
@@ -40,13 +40,13 @@ export const ES_QUESTS: Record<string, QuestText> = {
   },
   rattles_femur: {
     title: "Sin un hueso en que apoyarse",
-    summary: "Traquetes, el esqueleto más majo de la taberna, perdió el fémur izquierdo en el curro. Está a partir del piso tres del Túmulo.",
+    summary: "Rattles, el esqueleto más majo de la taberna, perdió el fémur izquierdo en el curro. Está a partir del piso tres del Túmulo.",
     offer: [
       "Historia graciosa. Estaba de turno en el Túmulo, alguien hizo rodar una roca y ahora voy a la pata coja.",
       "Mi fémur izquierdo anda por ahí abajo: piso tres o más hondo. Los compañeros que lo vigilan no me lo devuelven. Orgullo profesional.",
       "Tráemelo y te doy mi amuleto de la suerte. Tampoco es mío. Historia larga.",
     ],
-    stages: ["Recupera el fémur de Traquetes (Túmulo, piso 3 o más)", "Devuélvele el fémur a Traquetes"],
+    stages: ["Recupera el fémur de Rattles (Túmulo, piso 3 o más)", "Devuélvele el fémur a Rattles"],
     remind: ["Piso tres o más abajo. Lo reconocerás: es el único hueso que parece avergonzado."],
     complete: ["¡MI PIERNA! Ay, cuánto te he echado de menos. *clic* Ya está. Simétrico otra vez.", "Toma, una pata de conejo. El conejo y yo estamos de acuerdo en que te dará más suerte a ti que a nosotros."],
   },
@@ -236,13 +236,13 @@ export const ES_QUESTS: Record<string, QuestText> = {
   },
   alma_bell: {
     title: "La campana perdida",
-    summary: "Alguien se ha llevado la campanita de bronce del santuario. La hermana Alma la ha oído sonar, muy flojito, hacia la Espesura. Trasgos, seguramente.",
+    summary: "Alguien se ha llevado la campanita de bronce del santuario. La hermana Alma la ha oído sonar, muy flojito, hacia la Espesura. Goblins, seguramente.",
     offer: [
       "Nos han quitado la campana. La pequeña, la que toca para el rezo de la mañana. Y ayer, desde la Espesura, la oí. Din. Din. Muy satisfecha de sí misma.",
-      "A los trasgos les encanta todo lo que brilla y hace ruido. ¿Me la traes a casa? Con suavidad, si puede ser. Con firmeza, si hace falta.",
+      "A los goblins les encanta todo lo que brilla y hace ruido. ¿Me la traes a casa? Con suavidad, si puede ser. Con firmeza, si hace falta.",
     ],
     stages: ["Encuentra la campana del santuario en la Espesura", "Devuélvele la campana a la hermana Alma"],
-    remind: ["Presta oído al «din». Y a los trasgos. Sobre todo a los trasgos."],
+    remind: ["Presta oído al «din». Y a los goblins. Sobre todo a los goblins."],
     complete: ["Ay, la has encontrado. Escucha: sigue sonando limpia.", "Gracias. Todo el callejón la oirá mañana, y alguno hasta sabrá que fuiste tú."],
   },
 };

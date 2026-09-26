@@ -35,6 +35,7 @@ export interface LakeShape {
 export class Lake extends Entity implements Interactable {
   interactRadius = 10;
   interactPriority = 3;
+  readonly toolTarget = true;
   private readonly shape: LakeShape;
   private readonly texture: Texture;
   private readonly glints = new Graphics();

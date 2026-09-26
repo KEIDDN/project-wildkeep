@@ -1,3 +1,4 @@
+import { RichText } from "../components/Glyph";
 import { shopSellPrice } from "../../game/actions";
 import { useEffect, useRef } from "react";
 import { useUiStore } from "../../store/uiStore";
@@ -62,7 +63,7 @@ export function LootRevealQueue() {
         {itemName(def.id)}
         {current.quantity > 1 && <span className="loot-qty"> ×{current.quantity}</span>}
       </div>
-      <div className="loot-desc">{itemDesc(def.id)}</div>
+      <div className="loot-desc"><RichText text={itemDesc(def.id, true)} /></div>
       {def.value > 0 && !def.keyItem && <div className="loot-value">{t("loot.worth", { n: shopSellPrice(def.id) })}</div>}
     </div>
   );

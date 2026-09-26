@@ -2134,16 +2134,19 @@ kbd {
 
 /* ---------------------------------------------------------------- tutorial / help / journal */
 
+/* Tips: a small note at the left edge, below the vitals and above the
+   hotbar — readable, easy to ignore, never over the middle of the screen. */
 .tip-card {
   position: absolute;
   left: 16px;
-  top: 110px;
-  width: min(340px, 40vw);
-  padding: 10px 12px;
-  background: rgba(238, 189, 138, 0.97);
+  bottom: 118px;
+  width: min(270px, 30vw);
+  padding: 7px 10px 6px;
+  background: rgba(238, 189, 138, 0.93);
   color: var(--ink);
-  border: 3px solid #3b2226;
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4);
+  border: 2px solid #3b2226;
+  border-left-width: 5px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
   pointer-events: auto;
   z-index: 40;
   animation: tutorial-in 0.35s ease-out;
@@ -2152,18 +2155,33 @@ kbd {
 .tip-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 17px;
+  gap: 6px;
+  font-size: 15px;
 }
 
 .tip-head img {
-  width: 28px;
+  width: 20px;
 }
 
 .tip-card p {
-  margin: 6px 0;
-  font-size: 14px;
+  margin: 4px 0;
+  font-size: 13px;
   line-height: 1.3;
+}
+
+.tip-dismiss {
+  font-family: var(--font);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 1px 6px;
+  font-size: 13px;
+  color: var(--ink);
+  background: rgba(255, 244, 216, 0.6);
+  border: 1px solid rgba(59, 34, 38, 0.5);
+  border-radius: 3px;
+  cursor: pointer;
 }
 
 .intro-overlay {
@@ -2360,7 +2378,7 @@ kbd {
   left: auto;
   right: 16px;
   top: auto;
-  bottom: 150px;
+  bottom: 118px;
 }
 
 .tutorial {
@@ -4357,4 +4375,367 @@ body.dragging-item .slot:hover {
   line-height: 1.3;
   text-align: center;
   color: var(--ink-soft);
+}
+
+/* ==========================================================================
+   Controller: focus ring, hint bar, glyphs, controls columns
+   ========================================================================== */
+
+/* The ring only exists while the controller is in hand. */
+body.pad-mode .pad-focus {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(255, 213, 79, 0.28), 0 0 14px rgba(255, 213, 79, 0.55);
+  /* No position change here: absolutely placed markers (map) must stay put. */
+  z-index: 2;
+  animation: pad-focus-in 0.12s ease-out;
+}
+body.pad-mode .pad-focus:disabled {
+  outline-color: rgba(255, 213, 79, 0.45);
+}
+body.pad-mode .slot.pad-focus {
+  outline-offset: 0;
+}
+@keyframes pad-focus-in {
+  from {
+    outline-offset: 6px;
+  }
+}
+/* A controller player isn't pointing: hover styles would lie about where they are. */
+body.pad-mode,
+body.pad-mode * {
+  cursor: none !important;
+}
+/* Buttons read as buttons, not keys. */
+body.pad-mode kbd {
+  border-radius: 9px;
+  padding: 1px 6px;
+}
+
+.pad-hints {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  gap: 16px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: rgba(16, 13, 22, 0.86);
+  border: 2px solid rgba(255, 213, 79, 0.35);
+  color: var(--light);
+  font-size: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+}
+.pad-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.pad-glyph {
+  font-family: "WK Digits", "Pixelify Sans", system-ui, sans-serif;
+  min-width: 22px;
+  border-radius: 11px;
+  font-weight: bold;
+}
+.fam-playstation .g-a { color: #3f6fd8; }
+.fam-playstation .g-b { color: #d8403f; }
+.fam-playstation .g-x { color: #c457b3; }
+.fam-playstation .g-y { color: #1f9e77; }
+.fam-xbox .g-a { color: #2f8f3a; }
+.fam-xbox .g-b { color: #c8322b; }
+.fam-xbox .g-x { color: #2b62c4; }
+.fam-xbox .g-y { color: #b58a00; }
+
+.controls .control-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.3fr) minmax(110px, 1fr) minmax(90px, 0.8fr);
+}
+.controls .control-head {
+  font-size: 12px;
+  opacity: 0.7;
+  border-bottom: none;
+}
+.controls .pad-keys {
+  justify-content: flex-start;
+}
+.keycap.padcap {
+  border-radius: 12px;
+  min-width: 38px;
+  font-family: "WK Digits", "Pixelify Sans", system-ui, sans-serif;
+}
+.pad-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0 8px;
+  font-size: 13px;
+}
+.pad-status .pad-off {
+  opacity: 0.7;
+}
+.pad-status .setting {
+  margin: 0;
+}
+.title-pad {
+  color: var(--gold);
+}
+
+/* ---- the game menu strip (Bag · Character · … · Menu) ---- */
+.menu-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -10px -6px 12px;
+  padding: 0 0 8px;
+  border-bottom: 2px solid rgba(59, 34, 38, 0.2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.menu-strip-tab {
+  font-family: var(--font);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 14px;
+  color: var(--ink-soft);
+  background: rgba(255, 244, 216, 0.25);
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.menu-strip-tab img {
+  width: 20px;
+  height: 20px;
+}
+.menu-strip-tab:hover {
+  background: rgba(255, 244, 216, 0.55);
+}
+.menu-strip-tab.active {
+  color: var(--ink);
+  background: #fff4d8;
+  border-color: var(--ink);
+  font-weight: bold;
+}
+.menu-strip-shoulder {
+  flex: none;
+  margin: 0 2px;
+}
+
+/* ---- map: "Here" sheet ---- */
+.map-frame.here {
+  flex: 0 1 auto;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 260px);
+  background: #2a2a22;
+}
+.here-you {
+  width: 10px;
+  height: 10px;
+  border-width: 2px;
+  background: transparent;
+  box-shadow: 0 0 0 2px #e0453a, 0 0 12px 4px rgba(255, 213, 79, 0.7);
+  pointer-events: none;
+}
+.here-exit .map-medallion {
+  display: none;
+}
+.here-exit-arrow {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  color: #fff4d8;
+  background: #3b6d3a;
+  border: 2px solid #fff4d8;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px #2a1a20;
+}
+.here-legend {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+  font-size: 14px;
+}
+.here-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.here-legend i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #2a1a20;
+}
+.here-legend i.lg-you {
+  background: #e0453a;
+  border-color: #fff4d8;
+  box-shadow: 0 0 0 1px #2a1a20;
+}
+.here-legend i.lg-fog {
+  border-radius: 2px;
+  background: #e2c496;
+}
+
+/* ==========================================================================
+   Readability pass: numbers first. Counts over icons and values on bars get
+   a dark outline; prices and rewards are a size up; nothing that carries
+   information is below 12px (laptop + controller distance).
+   ========================================================================== */
+.slot-qty,
+.hotslot-qty,
+.tnode-rank {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 1px 0 0 #1a1016, -1px 0 0 #1a1016, 0 1px 0 #1a1016, 0 -1px 0 #1a1016, 1px 1px 0 #1a1016;
+}
+.bar-label {
+  font-size: 13px;
+  text-shadow: 1px 0 0 #1a1016, -1px 0 0 #1a1016, 0 1px 0 #1a1016, 0 -1px 0 #1a1016;
+}
+.vital-mp .bar-label {
+  font-size: 12px;
+}
+.price-btn,
+.detail-value {
+  font-size: 15px;
+  font-weight: 700;
+}
+.old-price,
+.map-tag,
+.kept-tag,
+.wear,
+.skill-tag,
+.skill-train,
+.hud-honor,
+.hud-drunk,
+.hud-bounty,
+.equip-label,
+.tutorial-head,
+.goal-term,
+.ctx-title,
+.link-btn {
+  font-size: 13px;
+}
+.detail-rarity,
+.detail-weapon,
+.detail-unique,
+.detail-compare,
+.quest-summary,
+.quest-progress,
+.fish-hint,
+.rep {
+  font-size: 13px;
+}
+.quest-rewards {
+  font-size: 13px;
+  color: #4a2a1a;
+}
+.quest-giver,
+.quest-status,
+.quest-kind,
+.person-tier,
+.person-loves,
+.person-perk,
+.tag,
+.bj-tag,
+.talent-badge,
+.talent-plus,
+.talent-branch-count,
+.slot-badge,
+.slot-label {
+  font-size: 12px;
+}
+.talent-status {
+  font-size: 11px;
+  opacity: 0.9;
+}
+.rl-num,
+.rl-chip,
+.rl-stake {
+  font-size: 13px;
+  font-weight: 700;
+}
+.rl-glyph {
+  font-size: 11px;
+}
+.quest-tracker-title {
+  font-size: 13px;
+}
+
+/* ---- glyphs: sit on the text line; bigger where they're the whole hint ---- */
+svg.glyph {
+  display: inline-block;
+  vertical-align: middle;
+  margin: -3px 1px 0;
+  overflow: visible;
+}
+kbd.glyph {
+  vertical-align: middle;
+}
+.pad-hints svg.glyph {
+  height: 22px !important;
+}
+.hotslot-key:has(svg.glyph) {
+  background: none;
+  border: none;
+  padding: 0;
+  top: -13px;
+  left: -12px;
+}
+.hotslot-key svg.glyph {
+  height: 22px !important;
+  margin: 0;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5));
+}
+.hotslot-key kbd.glyph {
+  margin: 0;
+  font-size: 11px;
+}
+.interaction-prompt svg.glyph {
+  height: 26px !important;
+}
+.menu-strip-shoulder {
+  height: 24px !important;
+}
+/* Here sheet: the canvas sets the frame's size so markers line up. */
+.map-frame.here {
+  aspect-ratio: auto !important;
+  height: auto;
+  max-height: none;
+}
+.map-frame.here .map-canvas {
+  height: auto;
+}
+.map-frame.here {
+  width: fit-content !important;
+}
+.map-frame.here .map-canvas {
+  width: auto;
+  max-width: min(560px, 100%);
+  max-height: calc(100vh - 300px);
+}
+/* Labels of exits at the frame's edges lean inwards instead of spilling out. */
+.here-exit.edge-l .map-label {
+  transform: translateX(45%);
+}
+.here-exit.edge-r .map-label {
+  transform: translateX(-45%);
 }

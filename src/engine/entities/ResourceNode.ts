@@ -35,6 +35,7 @@ import type { InteractionPrompt } from "../../store/uiStore";
  * sprout) until it regrows.
  */
 export class ResourceNode extends Entity implements Interactable, GatherTarget {
+  readonly toolTarget = true;
   readonly def: ResourceNodeDef;
   private full: Sprite;
   private depleted: Sprite | null;

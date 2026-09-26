@@ -1,7 +1,9 @@
 import { useSettingsStore, type Language } from "../store/settingsStore";
 import { en } from "./en";
 import { es } from "./es";
-import { isAction, keyLabel } from "../game/input/bindings";
+import { isAction, keyLabel, moveLabel, padLabel } from "../game/input/bindings";
+import { usingGamepad } from "../game/input/gamepad";
+import { actionCode, glyphToken } from "../game/input/glyphs";
 
 /**
  * Localization.
@@ -45,6 +47,20 @@ export type AnyKey = Leaves<typeof en>;
 
 const DICTS: Record<Language, Dict> = { en, es };
 
+/** Texts that say "click" / "double-click" read differently with a controller in hand. */
+const PAD_TEXT: Partial<Record<AnyKey, AnyKey>> = {
+  "intro.continue": "padText.introContinue",
+  "inventory.selectHint": "padText.selectHint",
+  "tutorial.steps.bag.hint": "padText.bagHint",
+  "tutorial.topics.movement.lines": "padText.movement",
+  "tutorial.topics.inventory.lines": "padText.inventory",
+  "tutorial.topics.combat.lines": "padText.combat",
+  "talents.hover": "padText.talentHover",
+  "talents.clickToLearn": "padText.clickToLearn",
+  "stash.subtitle": "padText.stash",
+};
+const variant = (key: string): string => (usingGamepad() ? (PAD_TEXT[key as AnyKey] ?? key) : key);
+
 export function currentLanguage(): Language {
   return useSettingsStore.getState().language;
 }
@@ -69,25 +85,49 @@ function lookup(dict: unknown, key: string): unknown {
 }
 
 /**
- * Fills `{name}` placeholders from params, and `{k:action}` with the key the
- * player has bound to that action ("Press {k:map} for the map"), so hints stay
- * right after remapping.
+ * Fills `{name}` placeholders from params, and `{k:action}` with the key (or
+ * controller button) the player has bound to that action ("Press {k:map} for
+ * the map"), so hints stay right after remapping and follow the device in
+ * use. `{p:a}` is a fixed controller button (menus: ✕ / A).
  */
-export function interpolate(text: string, params?: Record<string, string | number>): string {
-  if (text.includes("{k:")) text = text.replace(/\{k:(\w+)\}/g, (m, a) => (isAction(a) ? keyLabel(a) : m));
+export function interpolate(text: string, params?: Record<string, string | number>, rich = false): string {
+  if (text.includes("{k:")) {
+    // "WASD" on a controller is just "Left stick".
+    if (usingGamepad()) text = text.replace("{k:moveUp}{k:moveLeft}{k:moveDown}{k:moveRight}", rich ? glyphToken("pad:lstick") : moveLabel());
+    text = text.replace(/\{k:(\w+)\}/g, (m, a) => (isAction(a) ? (rich ? glyphToken(actionCode(a)) : keyLabel(a)) : m));
+  }
+  if (text.includes("{p:")) text = text.replace(/\{p:(\w+)\}/g, (_, c) => (rich ? glyphToken(`pad:${c}`) : padLabel(`pad:${c}`)));
   if (!params) return text;
   return text.replace(/\{(\w+)\}/g, (m, k) => (k in params ? String(params[k]) : m));
 }
 
 /** Translate a UI string. Falls back to English, then to the key. */
 export function t(key: TKey, params?: Record<string, string | number>): string {
-  const v = lookup(DICTS[currentLanguage()], key) ?? lookup(en, key);
+  const k = variant(key);
+  const v = lookup(DICTS[currentLanguage()], k) ?? lookup(en, k);
   return interpolate(typeof v === "string" ? v : key, params);
+}
+
+/**
+ * Rich variants: inputs come out as glyph tokens for `<RichText>` to draw as
+ * real buttons / keycaps. Only for text rendered through RichText.
+ */
+export function tr(key: TKey, params?: Record<string, string | number>): string {
+  const k = variant(key);
+  const v = lookup(DICTS[currentLanguage()], k) ?? lookup(en, k);
+  return interpolate(typeof v === "string" ? v : key, params, true);
+}
+export const tDynR = (key: string, params?: Record<string, string | number>) => tr(key as TKey, params);
+export function tlr(key: TListKey, params?: Record<string, string | number>): string[] {
+  const k = variant(key);
+  const v = lookup(DICTS[currentLanguage()], k) ?? lookup(en, k);
+  return Array.isArray(v) ? v.map((line) => interpolate(line, params, true)) : [];
 }
 
 /** Translate a list of lines (tutorial cards, intro…). */
 export function tl(key: TListKey, params?: Record<string, string | number>): string[] {
-  const v = lookup(DICTS[currentLanguage()], key) ?? lookup(en, key);
+  const k = variant(key);
+  const v = lookup(DICTS[currentLanguage()], k) ?? lookup(en, k);
   return Array.isArray(v) ? v.map((line) => interpolate(line, params)) : [];
 }
 

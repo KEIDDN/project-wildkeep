@@ -1,3 +1,4 @@
+import { areaName } from "../../i18n/content";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Panel } from "../components/Panel";
 import { REGIONS, REGION_BY_ID, regionOfArea, type RegionDef, type RegionId, type RegionStatus } from "../../data/world";
@@ -10,7 +11,8 @@ import { useDungeonStore } from "../../store/dungeonStore";
 import { useTimeStore } from "../../store/timeStore";
 import { getGame } from "../../engine/gameInstance";
 import { TILE } from "../../game/core/constants";
-import { keyLabel } from "../../game/input/bindings";
+import { Glyph } from "../components/Glyph";
+import { usingGamepad } from "../../game/input/gamepad";
 import { t, tDyn } from "../../i18n";
 
 /**
@@ -22,12 +24,16 @@ export function MapPanel() {
   const area = useWorldStore((s) => s.area);
   const surface = useDungeonStore((s) => s.surface.area);
   const inTown = ["town", "house", "shop", "forge", "tavern"].includes(area);
-  const [sheet, setSheet] = useState<"world" | "town">("world");
+  // Opens on "Here": the first question is always "where am I?".
+  const [sheet, setSheet] = useState<"here" | "world" | "town">("here");
   const day = useTimeStore((s) => s.day);
   const here = regionOfArea(area, surface);
   return (
     <Panel title={t("map.title")} subtitle={t("map.subtitle", { place: tDyn(`map.region.${here}.name`), day })} icon="map_scroll" width={1060} className="map-panel">
       <div className="tabs">
+        <button type="button" className={`tab${sheet === "here" ? " active" : ""}`} onClick={() => setSheet("here")}>
+          {t("map.tabHere")}
+        </button>
         <button type="button" className={`tab${sheet === "world" ? " active" : ""}`} onClick={() => setSheet("world")}>
           {t("map.tabWorld")}
         </button>
@@ -35,16 +41,16 @@ export function MapPanel() {
           {t("map.tabTown")}
         </button>
       </div>
-      {sheet === "world" ? <WorldSheet here={here} /> : <TownSheet inTown={inTown} area={area} />}
+      {sheet === "here" ? <HereSheet region={here} /> : sheet === "world" ? <WorldSheet here={here} /> : <TownSheet inTown={inTown} area={area} />}
       <div className="map-foot">
-        <span className="map-legend">
+        <span className="map-legend" style={sheet === "here" ? { visibility: "hidden" } : undefined}>
           <i className="lg lg-here" /> {t("map.legend.here")}
           <i className="lg lg-visited" /> {t("map.legend.visited")}
           <i className="lg lg-open" /> {t("map.legend.open")}
           <i className="lg lg-rumoured" /> {t("map.legend.rumoured")}
         </span>
         <span className="map-close-hint">
-          <kbd>{keyLabel("map")}</kbd> / <kbd>Esc</kbd> {t("map.close")}
+          <Glyph action="map" /> / <Glyph code={usingGamepad() ? "pad:b" : "escape"} /> {t("map.close")}
         </span>
       </div>
     </Panel>
@@ -131,6 +137,137 @@ function RegionCard({ r, status, here }: { r: RegionDef; status: RegionStatus; h
     </aside>
   );
 }
+
+/**
+ * "Here": the area you're standing in, from above — the real ground, fogged
+ * where you haven't walked, with its ways out, a few landmarks you've seen,
+ * and you (arrow = facing). Built by Game.localMap when the sheet opens.
+ */
+function HereSheet({ region }: { region: RegionId }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const data = useMemo(() => getGame()?.localMap() ?? null, []);
+  const [focus, setFocus] = useState<number | null>(null);
+
+  useEffect(() => {
+    const c = canvas.current;
+    if (!c || !data) return;
+    const k = c.width / data.width;
+    const ctx = c.getContext("2d")!;
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = "#2a2a22";
+    ctx.fillRect(0, 0, c.width, c.height);
+    if (data.image) ctx.drawImage(data.image, 0, 0, c.width, c.height);
+    // Parchment fog over what you haven't walked (soft edges, cell by cell).
+    const { cols, rows, cells } = data.explored;
+    const cw = c.width / cols;
+    const ch = c.height / rows;
+    for (let y = 0; y < rows; y++)
+      for (let x = 0; x < cols; x++) {
+        if (cells[y * cols + x]) continue;
+        const near = [cells[y * cols + x - 1], cells[y * cols + x + 1], cells[(y - 1) * cols + x], cells[(y + 1) * cols + x]].some(Boolean);
+        ctx.fillStyle = near ? "rgba(226,196,150,0.72)" : "rgba(226,196,150,0.96)";
+        ctx.fillRect(Math.floor(x * cw), Math.floor(y * ch), Math.ceil(cw), Math.ceil(ch));
+      }
+    const dot = (x: number, y: number, color: string, r: number) => {
+      ctx.beginPath();
+      ctx.arc(x * k, y * k, r, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "#2a1a20";
+      ctx.stroke();
+    };
+    for (const p of data.pois) dot(p.x, p.y, POI_COLOR[p.kind], p.kind === "water" ? 5 : 3.5);
+    // You: a ring and an arrow the way you're facing.
+    const px = data.player.x * k;
+    const py = data.player.y * k;
+    const a = Math.atan2(data.player.fy, data.player.fx);
+    ctx.beginPath();
+    ctx.arc(px, py, 9, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,244,216,0.55)";
+    ctx.fill();
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(a);
+    ctx.beginPath();
+    ctx.moveTo(9, 0);
+    ctx.lineTo(-6, -6);
+    ctx.lineTo(-3, 0);
+    ctx.lineTo(-6, 6);
+    ctx.closePath();
+    ctx.fillStyle = "#e0453a";
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#fff4d8";
+    ctx.stroke();
+    ctx.restore();
+  }, [data]);
+
+  if (!data) return <div className="empty-hint">{t("map.here.none")}</div>;
+  const w = Math.round(Math.min(560, (560 * data.width) / Math.max(data.width, data.height)));
+  const h = Math.round((w * data.height) / data.width);
+  const f = focus !== null ? data.exits[focus] : null;
+  return (
+    <div className="map-body">
+      <div className="map-frame here" style={{ aspectRatio: `${data.width} / ${data.height}` }}>
+        <canvas ref={canvas} width={w} height={h} className="map-canvas" />
+        {data.exits.map((e, i) => (
+          <button
+            type="button"
+            key={i}
+            className={`map-marker small here-exit${focus === i ? " focused" : ""}${e.x / data.width < 0.2 ? " edge-l" : e.x / data.width > 0.8 ? " edge-r" : ""}`}
+            style={{ left: `${(e.x / data.width) * 100}%`, top: `${(e.y / data.height) * 100}%` }}
+            onMouseEnter={() => setFocus(i)}
+            onFocus={() => setFocus(i)}
+            onClick={() => setFocus(i)}
+          >
+            <span className="here-exit-arrow">➜</span>
+            {focus === i && <span className="map-label">{t("map.here.toward", { place: e.label })}</span>}
+          </button>
+        ))}
+        <span className="map-you here-you" style={{ left: `${(data.player.x / data.width) * 100}%`, top: `${(data.player.y / data.height) * 100}%` }} />
+        <div className="map-compass">
+          <span>{t("map.north")}</span>
+        </div>
+      </div>
+      <aside className="map-card">
+        <div className="map-card-head">
+          <img src="/icons/map_flag.png" alt="" />
+          <div>
+            <b>{areaName(data.area)}</b>
+            <small className="map-status st-visited">{tDyn(`map.region.${region}.name`)}</small>
+          </div>
+        </div>
+        <p className="map-card-text">{f ? t("map.here.toward", { place: f.label }) : t("map.here.intro", { area: areaName(data.area) })}</p>
+        <ul className="here-legend">
+          <li>
+            <i className="lg-you" /> {t("map.here.you")}
+          </li>
+          <li>
+            <span className="here-exit-arrow">➜</span> {t("map.here.exit")}
+          </li>
+          <li>
+            <i style={{ background: POI_COLOR.npc }} /> {t("map.here.people")}
+          </li>
+          <li>
+            <i style={{ background: POI_COLOR.chest }} /> {t("map.here.chest")}
+          </li>
+          <li>
+            <i style={{ background: POI_COLOR.water }} /> {t("map.here.water")}
+          </li>
+          <li>
+            <i style={{ background: POI_COLOR.board }} /> {t("map.here.board")}
+          </li>
+          <li>
+            <i className="lg-fog" /> {t("map.here.unexplored")}
+          </li>
+        </ul>
+      </aside>
+    </div>
+  );
+}
+
+const POI_COLOR = { npc: "#5fb4ff", chest: "#ffd54f", water: "#7fe0ff", board: "#d98a4a" } as const;
 
 function TownSheet({ inTown, area }: { inTown: boolean; area: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);

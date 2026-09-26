@@ -36,6 +36,8 @@ export interface ContentTable {
 
 const TABLES: Partial<Record<string, ContentTable>> = { es: ES_CONTENT };
 
+if (import.meta.env.DEV) void import("./glossary").then(async (g) => g.checkGlossary([ES_CONTENT, (await import("./es")).es, await import("./npcs-es"), await import("./quests-es")]));
+
 const warned = new Set<string>();
 function table(): ContentTable | null {
   const lang = currentLanguage();
@@ -57,11 +59,11 @@ export function itemName(id: string): string {
   return tb ? pick(tb.items[id]?.[0], def.name, `item ${id}`) : def.name;
 }
 
-export function itemDesc(id: string): string {
+export function itemDesc(id: string, rich = false): string {
   const def = getItem(id);
   const tb = table();
-  // Descriptions may mention keys ({k:potion}).
-  return interpolate(tb ? pick(tb.items[id]?.[1], def.description, `item desc ${id}`) : def.description);
+  // Descriptions may mention keys ({k:potion}); `rich` draws them as glyphs (RichText).
+  return interpolate(tb ? pick(tb.items[id]?.[1], def.description, `item desc ${id}`) : def.description, undefined, rich);
 }
 
 export function nodeName(id: string, english: string): string {

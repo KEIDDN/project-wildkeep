@@ -1,5 +1,8 @@
 import { ControlsSettings } from "./panels/ControlsSettings";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavLayer } from "./nav/padNav";
+import { PadHints } from "./nav/PadHints";
+import { useInputDevice } from "../game/input/gamepad";
 import { SAVE_SLOTS, persistence, type SaveSlot, type SlotSummary } from "../game/save/saveManager";
 import { deleteSlot, loadGame, newGame } from "../game/save/gameSave";
 import { useSettingsStore } from "../store/settingsStore";
@@ -22,6 +25,10 @@ export function TitleScreen({ onPlay }: { onPlay: () => void }) {
   const anySave = slots.some(Boolean);
 
   useEffect(() => audio.playTheme("main_theme", 2), []);
+  const ref = useRef<HTMLDivElement>(null);
+  // Controller: the whole title is one menu; ○ is the "Back" button of each page.
+  useNavLayer(ref, {});
+  const pad = useInputDevice();
 
   const click = () => audio.sfx("ui");
   const startNew = (slot: SaveSlot) => {
@@ -34,7 +41,7 @@ export function TitleScreen({ onPlay }: { onPlay: () => void }) {
   };
 
   return (
-    <div className="title-screen">
+    <div className="title-screen" ref={ref}>
       <div className="title-sky">
         <div className="title-moon" />
         <div className="title-hills back" />
@@ -132,7 +139,7 @@ export function TitleScreen({ onPlay }: { onPlay: () => void }) {
                 </button>
               </div>
             )}
-            <button type="button" className="btn" onClick={() => (click(), setConfirm(null), setView("main"))}>
+            <button type="button" className="btn" data-nav-back onClick={() => (click(), setConfirm(null), setView("main"))}>
               {t("common.back")}
             </button>
           </div>
@@ -146,7 +153,7 @@ export function TitleScreen({ onPlay }: { onPlay: () => void }) {
               <summary>{t("menu.tabControls")}</summary>
               <ControlsSettings />
             </details>
-            <button type="button" className="btn" onClick={() => (click(), setView("main"))}>
+            <button type="button" className="btn" data-nav-back onClick={() => (click(), setView("main"))}>
               {t("common.back")}
             </button>
           </div>
@@ -160,13 +167,17 @@ export function TitleScreen({ onPlay }: { onPlay: () => void }) {
             <p>{t("title.creditsArt")}</p>
             <p>{t("title.creditsMusic")}</p>
             <p>{t("title.creditsTech")}</p>
-            <button type="button" className="btn" onClick={() => (click(), setView("main"))}>
+            <button type="button" className="btn" data-nav-back onClick={() => (click(), setView("main"))}>
               {t("common.back")}
             </button>
           </div>
         )}
       </div>
-      <div className="title-footer">{t("title.footer")}</div>
+      <div className="title-footer">
+        {t("title.footer")}
+        {pad.connected > 0 && <span className="title-pad"> · 🎮 {pad.name || t("pad.generic")}</span>}
+      </div>
+      <PadHints />
     </div>
   );
 }

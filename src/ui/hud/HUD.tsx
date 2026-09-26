@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FishingMeter } from "./FishingMeter";
 import { getGame } from "../../engine/gameInstance";
 import { rank, talentPoints } from "../../data/talents";
@@ -22,8 +22,10 @@ import { useMineStore } from "../../store/mineStore";
 import { honorRank } from "../../game/social/honor";
 import { areaName, floorThemeName, itemName, npcName } from "../../i18n/content";
 import { NPCS } from "../../data/npcs";
-import { fmt, t, tDyn, type TKey } from "../../i18n";
-import { keyLabel, type Action } from "../../game/input/bindings";
+import { fmt, t, tDyn, tDynR, type TKey } from "../../i18n";
+import { type Action } from "../../game/input/bindings";
+import { Glyph, RichText } from "../components/Glyph";
+import { skipTutorial } from "../../game/tutorial";
 import { maxEnergy } from "../../game/systems/vitals";
 import { maxDurability, wearState } from "../../game/systems/durability";
 import { Bar } from "../components/Bar";
@@ -119,17 +121,17 @@ export function HUD() {
       )}
 
       <div className="hud-hotbar">
-        <HotSlot itemId={equipment.weapon} hint={keyLabel("attack")} slot="weapon" />
-        <HotSlot itemId={equipment.tool} hint={keyLabel("interact")} slot="tool" />
+        <HotSlot itemId={equipment.weapon} hint={<Glyph action="attack" />} slot="weapon" />
+        <HotSlot itemId={equipment.tool} hint={<Glyph action="attack" />} slot="tool" />
         <div className="hotslot" title={t("controls.action.potion")}>
           <img src="/icons/potion_health.png" alt="" style={{ opacity: potions ? 1 : 0.35 }} />
           <span className="hotslot-qty">{potions}</span>
-          <span className="hotslot-key">{keyLabel("potion")}</span>
+          <span className="hotslot-key"><Glyph action="potion" /></span>
         </div>
-        <AbilitySlot ability="dodge" icon="boots_leather" hint={keyLabel("dodge")} />
-        <AbilitySlot ability="parry" icon="glyph_shield" hint={keyLabel("parry")} />
-        {rank(talents, "whirlwind") > 0 && <AbilitySlot ability="whirl" icon="sword_epic" hint={keyLabel("ability")} />}
-        {magic && <AbilitySlot ability="spark" icon="spellbook" hint={keyLabel("cast")} />}
+        <AbilitySlot ability="dodge" icon="boots_leather" hint={<Glyph action="dodge" />} />
+        <AbilitySlot ability="parry" icon="glyph_shield" hint={<Glyph action="parry" />} />
+        {rank(talents, "whirlwind") > 0 && <AbilitySlot ability="whirl" icon="sword_epic" hint={<Glyph action="ability" />} />}
+        {magic && <AbilitySlot ability="spark" icon="spellbook" hint={<Glyph action="cast" />} />}
         <span className="hotbar-gap" />
         <MenuSlot panel="inventory" icon="chest" action="inventory" />
         <MenuSlot panel="character" icon="armor_leather" action="character" />
@@ -152,7 +154,7 @@ function MenuSlot({ panel, icon, action, badge }: { panel: PanelId; icon: string
   return (
     <div className="hotslot hotslot-bag hotslot-menu" title={t(`controls.action.${action}` as TKey)} onClick={() => useUiStore.getState().openPanel(panel)}>
       <img src={`/icons/${icon}.png`} alt="" />
-      <span className="hotslot-key">{keyLabel(action)}</span>
+      <span className="hotslot-key"><Glyph action={action} /></span>
       {!!badge && <span className="hotslot-badge">{badge}</span>}
     </div>
   );
@@ -243,7 +245,7 @@ function StatusEffects() {
  * An ability with a cooldown sweep. The sweep is animated straight from the
  * engine every frame through a CSS variable — no React re-render per frame.
  */
-function AbilitySlot({ ability, icon, hint }: { ability: "dodge" | "whirl" | "parry" | "spark"; icon: string; hint: string }) {
+function AbilitySlot({ ability, icon, hint }: { ability: "dodge" | "whirl" | "parry" | "spark"; icon: string; hint: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let raf = 0;
@@ -301,7 +303,7 @@ function StaminaBar() {
   );
 }
 
-function HotSlot({ itemId, hint, slot }: { itemId?: string; hint: string; slot: "weapon" | "tool" }) {
+function HotSlot({ itemId, hint, slot }: { itemId?: string; hint: ReactNode; slot: "weapon" | "tool" }) {
   const def = itemId ? getItem(itemId) : null;
   const cur = usePlayerStore((s) => (itemId ? Math.floor(s.wear[slot] ?? 1e9) : 0));
   const max = itemId ? maxDurability(itemId) : 0;
@@ -329,14 +331,14 @@ function InteractionPrompt() {
   if (!prompt || panel) return null;
   return (
     <div ref={ref} className={`interaction-prompt${prompt.blocked ? " blocked" : ""}${avoid ? " avoid" : ""}`}>
-      <kbd>{keyLabel("interact")}</kbd>
+      <Glyph action="interact" size={1.5} />
       <span>
         {prompt.verb} <b>{prompt.target}</b>
       </span>
       {prompt.blocked && <span className="prompt-blocked">{prompt.blocked}</span>}
       {prompt.alt && !prompt.blocked && (
         <span className="prompt-alt">
-          <kbd>{prompt.alt.key}</kbd> {prompt.alt.label}
+          <Glyph action={prompt.alt.action} /> {prompt.alt.label}
         </span>
       )}
     </div>
@@ -407,14 +409,14 @@ function TutorialTracker() {
         <button
           type="button"
           className="link-btn"
-          onClick={() => (confirmSkip ? useTutorialStore.getState().skip() : setConfirmSkip(true))}
+          onClick={() => (confirmSkip ? skipTutorial() : setConfirmSkip(true))}
           onMouseLeave={() => setConfirmSkip(false)}
         >
           {confirmSkip ? t("tutorial.skipConfirm") : t("hud.skip")}
         </button>
       </div>
-      <div className="tutorial-text">{tDyn(`tutorial.steps.${def.id}.text`)}</div>
-      <div className="tutorial-hint">{tDyn(`tutorial.steps.${def.id}.hint`)}</div>
+      <div className="tutorial-text"><RichText text={tDynR(`tutorial.steps.${def.id}.text`)} /></div>
+      <div className="tutorial-hint"><RichText text={tDynR(`tutorial.steps.${def.id}.hint`)} /></div>
     </div>
   );
 }

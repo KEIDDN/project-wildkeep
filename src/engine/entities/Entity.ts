@@ -65,6 +65,9 @@ export interface Interactable {
   interactPriority?: number;
   prompt(game: Game): InteractionPrompt | null;
   interact(game: Game): void;
+  /** Worked with the equipped tool (tree, rock, plot, water): the primary
+   * action (□ / attack) uses it too when no enemy is close. */
+  toolTarget?: boolean;
 }
 
 export function isInteractable(e: unknown): e is Interactable {

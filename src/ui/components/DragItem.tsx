@@ -104,6 +104,48 @@ function finish() {
   emit();
 }
 
+// ---- controller: pick up → move → place --------------------------------------
+
+/**
+ * The controller version of a drag: the item is lifted from the focused slot,
+ * the ghost hops from slot to slot with the focus, and ✕ drops it using the
+ * very same `accepts` / `onDrop` rules as the mouse.
+ */
+export function beginCarry(spec: DragSpec, at: HTMLElement | null): void {
+  active = { spec, x: 0, y: 0 };
+  carryTo(at);
+}
+
+/** Moves the carried item over `el` (a slot, or anything else). */
+export function carryTo(el: HTMLElement | null): void {
+  if (!active || !el) return;
+  const r = el.getBoundingClientRect();
+  active = { ...active, x: r.left + r.width * 0.7, y: r.top + r.height * 0.7 };
+  const t = (el.closest("[data-drop]") as HTMLElement | null) ?? null;
+  setOver(t, t ? (active.spec.accepts(t.dataset.drop!) ? "ok" : "bad") : undefined);
+  emit();
+}
+
+/** Drops the carried item on `el`. Returns the drop id it landed on (or null). */
+export function dropCarry(el: HTMLElement | null): string | null {
+  if (!active) return null;
+  const spec = active.spec;
+  const id = (el?.closest("[data-drop]") as HTMLElement | null)?.dataset.drop ?? null;
+  if (id && !spec.accepts(id)) {
+    spec.onReject?.(id);
+    return null;
+  }
+  finish();
+  if (id) spec.onDrop(id);
+  return id;
+}
+
+export function cancelCarry(): void {
+  if (active) finish();
+}
+
+export const carrying = (): boolean => active !== null;
+
 /** The item being dragged right now, if any (to light up where it fits). */
 export const useDraggedItem = () => useSyncExternalStore(subscribe, () => active?.spec.itemId ?? null);
 

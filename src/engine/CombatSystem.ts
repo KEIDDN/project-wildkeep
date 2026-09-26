@@ -1,4 +1,5 @@
 import type { Game } from "./Game";
+import { RUMBLE } from "../game/input/gamepad";
 import { isHittable } from "./entities/Entity";
 import { COMBO, type Swing } from "./entities/Player";
 import { Enemy } from "./entities/Enemy";
@@ -55,6 +56,7 @@ export class CombatSystem {
     if (hits) {
       g.shake(3, 0.18);
       g.hitStop(80);
+      RUMBLE.bigHit();
     }
   }
 
@@ -131,6 +133,9 @@ export class CombatSystem {
       g.kick(f.x, f.y, (heavy ? 3 : big ? 2.2 : 1.2) * im);
       // Brief hit-stop sells the impact (longer for big hits).
       g.hitStop(Math.round((heavy ? 120 : big || crits ? 80 : 45) * im));
+      // Only the blows worth feeling: heavies, finishers, crits.
+      if (heavy) RUMBLE.heavyHit();
+      else if (big || crits) RUMBLE.bigHit();
     }
   }
 

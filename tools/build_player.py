@@ -12,6 +12,7 @@ Run:  python3 tools/build_player.py
 """
 from collections import deque
 from pathlib import Path
+import json
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -228,5 +229,53 @@ def build():
             print(f"{name}_{d}: {im.width // FRAME} frames")
 
 
+BLADES_JSON = ROOT / "src/data/generated/player_blades.json"
+
+
+def split_blades():
+    """The attack (pierce) sheets come with a sword baked into the hand. Move
+    it out of the body into the metal mask only, so the game decides what is
+    held: the sword shape tinted like the weapon's icon, or — for daggers,
+    spears, maces — the weapon's own sprite. Also records, per frame, where the
+    grip is and how long the blade is (frame-relative to the player's anchor,
+    0.5 / 0.75 of a 64px frame; side sheets face right). Idempotent."""
+    out = {}
+    for d in ("side", "down", "up"):
+        base = Image.open(OUT / f"pierce_{d}.png").convert("RGBA")
+        mask = Image.open(OUT / f"pierce_{d}_mask.png").convert("RGBA")
+        bp, mp = base.load(), mask.load()
+        h = base.height
+        metal_row = MASK_LAYERS.index("metal") * h
+        frames = []
+        for i in range(base.width // FRAME):
+            pts = []
+            for y in range(h):
+                for x in range(i * FRAME, (i + 1) * FRAME):
+                    if mp[x, y + metal_row][3]:
+                        pts.append((x - i * FRAME, y))
+                        bp[x, y] = (0, 0, 0, 0)
+            if len(pts) < 4:
+                frames.append(None)
+                continue
+            xs = sorted(p[0] for p in pts)
+            ys = sorted(p[1] for p in pts)
+            ax, ay = FRAME * 0.5, FRAME * 0.75
+            if d == "side":
+                grip = (xs[0], ys[len(ys) // 2])
+                length = xs[-1] - xs[0] + 1
+            elif d == "down":
+                grip = (xs[len(xs) // 2], ys[0])
+                length = ys[-1] - ys[0] + 1
+            else:
+                grip = (xs[len(xs) // 2], ys[-1])
+                length = ys[-1] - ys[0] + 1
+            frames.append({"x": grip[0] - ax, "y": grip[1] - ay, "len": length})
+        base.save(OUT / f"pierce_{d}.png")
+        out[d] = frames
+    BLADES_JSON.write_text(json.dumps(out, indent=1))
+    print("pierce blades split:", {k: sum(1 for f in v if f) for k, v in out.items()})
+
+
 if __name__ == "__main__":
     build()
+    split_blades()

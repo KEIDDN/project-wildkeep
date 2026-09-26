@@ -1,4 +1,3 @@
-import { keyLabel } from "../../game/input/bindings";
 import { AnimatedSprite, Graphics, Sprite, Text, type Texture } from "pixi.js";
 import { Entity, type Hittable, type Interactable } from "./Entity";
 import type { Game } from "../Game";
@@ -293,7 +292,7 @@ export class Npc extends Entity implements Interactable, Hittable {
 
   prompt() {
     const verb = this.verb === "Gamble with" ? t("prompt.gamble") : this.verb ?? t("prompt.talk");
-    return { verb, target: this.displayName, alt: this.def && NPCS[this.def.id] ? { key: keyLabel("gift"), label: t("gift.give") } : undefined };
+    return { verb, target: this.displayName, alt: this.def && NPCS[this.def.id] ? { action: "gift" as const, label: t("gift.give") } : undefined };
   }
 
   interact(game: Game) {

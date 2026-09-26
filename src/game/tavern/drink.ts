@@ -14,10 +14,14 @@ import { t, tl } from "../../i18n";
  * A little too much at the Tipsy Wyvern. Tipsiness (0..100) rises with each
  * drink and wears off with time:
  *
- *   tipsy   25+  luckier at the tables, people notice
- *   drunk   50+  the world sways, you swing harder and guard worse,
- *                the dealer lets you bet bigger ("you feel invincible")
- *   wasted  80+  you stumble; at 100 you wake up at home with a story
+ *   tipsy   25+  a warm glow and a lazy camera drift; luckier at the tables
+ *   drunk   50+  your steps weave a little, you swing harder and guard
+ *                worse, the dealer lets you bet bigger ("you feel invincible")
+ *   wasted  80+  the odd small stumble (never in a fight), dodging tires you;
+ *                at 100 you wake up at home with a story
+ *
+ * Tuned to read as "haha, I'm drunk", never "I can't play". Going to bed
+ * drunk still means a hangover (Game.sleep).
  *
  * Fun, fictional, never punishing for long: it wears off in a few minutes.
  */
@@ -90,7 +94,7 @@ export const drunkLuck = (level = drunkLevel()) => (level >= 25 ? 0.03 : 0);
 /** Table limits while drunk: you feel invincible. */
 export const drunkLimitMult = (level = drunkLevel()) => (level >= 50 ? 1.5 : 1);
 /** Dodging is harder with a few in you. */
-export const drunkDodgeCost = (level = drunkLevel()) => (level >= 80 ? 1.8 : level >= 50 ? 1.4 : 1);
+export const drunkDodgeCost = (level = drunkLevel()) => (level >= 80 ? 1.4 : level >= 50 ? 1.2 : 1);
 
 // ---- the morning after ---------------------------------------------------------------------
 

@@ -1,15 +1,18 @@
-import { eventIs, keyLabel } from "../../game/input/bindings";
+import { eventIs } from "../../game/input/bindings";
+import { Glyph, RichText } from "../components/Glyph";
+import { useInputDevice } from "../../game/input/gamepad";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useNavLayer } from "../nav/padNav";
 import { useTutorialStore } from "../../store/tutorialStore";
 import { useUiStore } from "../../store/uiStore";
 import { HELP_TOPICS, HELP_TOPIC_ORDER, type HelpTopicId } from "../../data/tutorial";
 import { audio } from "../../game/audio/AudioManager";
 import { Panel } from "../components/Panel";
-import { t, tl, type TListKey } from "../../i18n";
+import { t, tlr, type TListKey } from "../../i18n";
 import { useAvoidPlayer } from "../hooks/useAvoidPlayer";
 
 const topicTitle = (id: HelpTopicId) => t(`tutorial.topics.${id}.title`);
-const topicLines = (id: HelpTopicId) => tl(`tutorial.topics.${id}.lines` as TListKey);
+const topicLines = (id: HelpTopicId) => tlr(`tutorial.topics.${id}.lines` as TListKey);
 
 /** Help menu (H): every tutorial topic, readable any time. */
 export function HelpPanel() {
@@ -32,7 +35,9 @@ export function HelpPanel() {
             <img src={`/icons/${HELP_TOPICS[tp].icon}.png`} alt="" /> {topicTitle(tp)}
           </div>
           {topicLines(tp).map((l) => (
-            <p key={l}>{l}</p>
+            <p key={l}>
+          <RichText text={l} />
+        </p>
           ))}
         </div>
       </div>
@@ -48,17 +53,21 @@ export function HelpPanel() {
  */
 export function TipCard() {
   const topic = useTutorialStore((s) => s.queue[0]);
-  const blocking = useUiStore((s) => s.activePanel === "intro" || s.activePanel === "dialogue");
+  // Never mid-fight: the card waits until the enemies are gone.
+  const combat = useUiStore((s) => s.combat);
+  const blocking = useUiStore((s) => s.activePanel === "intro" || s.activePanel === "dialogue") || combat;
+  const pad = useInputDevice();
   const ref = useRef<HTMLDivElement>(null);
   const panelOpen = useUiStore((s) => !!s.activePanel);
   const avoid = useAvoidPlayer(ref, !!topic && !blocking && !panelOpen);
   const dock = usePanelGutter(!!topic && panelOpen && !blocking);
   useEffect(() => {
-    if (!topic) return;
-    audio.sfx("ui");
+    if (!topic || blocking) return;
+    audio.sfx("ui", { volume: 0.5 });
+    // Its reading time only counts while it's actually on screen.
     const tm = setTimeout(() => useTutorialStore.getState().dismissTip(), 20000);
     return () => clearTimeout(tm);
-  }, [topic]);
+  }, [topic, blocking]);
   if (!topic || blocking) return null;
   // A window is open and there's no room beside it: wait until it closes
   // rather than sit on top of it.
@@ -70,9 +79,12 @@ export function TipCard() {
         <b>{topicTitle(topic)}</b>
       </div>
       {topicLines(topic).map((l) => (
-        <p key={l}>{l}</p>
+        <p key={l}>
+          <RichText text={l} />
+        </p>
       ))}
-      <button type="button" className="btn btn-small" onClick={() => useTutorialStore.getState().dismissTip()}>
+      <button type="button" className="tip-dismiss" onClick={() => useTutorialStore.getState().dismissTip()}>
+        {pad.device === "gamepad" && !panelOpen && <Glyph code="pad:b" />}
         {t("tutorial.done")}
       </button>
     </div>
@@ -112,7 +124,22 @@ export function IntroOverlay() {
   const active = useUiStore((s) => s.activePanel === "intro");
   const introSeen = useTutorialStore((s) => s.introSeen);
   const [line, setLine] = useState(0);
-  const lines = tl("intro.lines");
+  const lines = tlr("intro.lines");
+  const ref = useRef<HTMLDivElement>(null);
+  // ✕ reads on (nothing focused, so it can't hit "skip" by accident).
+  useNavLayer(
+    ref,
+    {
+      autoFocus: false,
+      onConfirm: (el) => {
+        if (el) return false;
+        next();
+        return true;
+      },
+      onCancel: null,
+    },
+    active,
+  );
 
   useEffect(() => {
     if (!introSeen && !useUiStore.getState().activePanel) useUiStore.getState().openPanel("intro");
@@ -139,13 +166,13 @@ export function IntroOverlay() {
   }
   const [before, after] = t("intro.continue").split("{key}");
   return (
-    <div className="intro-overlay" onClick={next}>
+    <div className="intro-overlay" ref={ref} onClick={next}>
       <div className="intro-text" key={line}>
         {lines[line]}
       </div>
       <div className="intro-hint">
         {before}
-        <kbd>{keyLabel("interact")}</kbd>
+        <Glyph action="interact" />
         {after} ·{" "}
         <button
           type="button"

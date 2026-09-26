@@ -25,6 +25,7 @@ import { t } from "../../i18n";
 export class FarmPlot extends Entity implements Interactable {
   interactRadius = 12;
   interactPriority = 2;
+  readonly toolTarget = true;
   private soil = new Graphics();
   /** Dark, damp soil drawn over the dry soil; fades in when watered. */
   private wetG = new Graphics();

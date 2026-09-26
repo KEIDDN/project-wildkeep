@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { audio } from "../../game/audio/AudioManager";
+import { useNavLayer } from "../nav/padNav";
 
 export interface MenuAction {
   label: string;
@@ -24,6 +25,8 @@ export interface MenuState {
 export function ContextMenu({ menu, onClose }: { menu: MenuState | null; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  // On a controller the menu takes over until something is picked or ○ closes it.
+  useNavLayer(ref, { onCancel: onClose, initial: () => ref.current?.querySelector<HTMLElement>(".ctx-item") ?? null }, !!menu);
 
   useLayoutEffect(() => {
     if (!menu) return setPos(null);

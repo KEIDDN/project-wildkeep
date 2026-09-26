@@ -22,6 +22,7 @@ import type { InteractionPrompt } from "../../store/uiStore";
 export class Thicket extends Entity implements Interactable, GatherTarget {
   interactRadius = 30;
   interactPriority = 0;
+  readonly toolTarget = true;
   readonly anim = "chop" as const;
   private hp = 5;
   private colliderId: number;

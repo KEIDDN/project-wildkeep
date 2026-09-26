@@ -1,3 +1,4 @@
+import { RichText } from "../components/Glyph";
 import { useState } from "react";
 import { useInventoryStore } from "../../store/inventoryStore";
 import { usePlayerStore } from "../../store/playerStore";
@@ -101,7 +102,7 @@ function RecipeRow({ r, gold }: { r: Recipe; gold: number }) {
           {itemName(def.id)}
           {r.skill && <small className="skill-tag">{t("crafting.skillXp", { n: r.skill.xp, skill: skillName(r.skill.id) })}</small>}
         </div>
-        <small>{itemDesc(def.id)}</small>
+        <small><RichText text={itemDesc(def.id, true)} /></small>
         {(unlocks.length > 0 || delta) && <small className="craft-why">{unlocks.length > 0 ? t("crafting.unlocks", { what: unlocks.join(", ") }) : delta}</small>}
         <div className="materials">
           {r.upgradesFrom && <span className={`mat${ownsItem(r.upgradesFrom) ? "" : " missing"}`}>⟲ {itemName(r.upgradesFrom)}</span>}

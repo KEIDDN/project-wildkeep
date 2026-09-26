@@ -1,4 +1,6 @@
 import { Sprite } from "pixi.js";
+import { BLADES, heldScale, iconTint, swingsSheetBlade } from "../weaponVisual";
+import { RUMBLE } from "../../game/input/gamepad";
 import type { Direction } from "../../game/core/types";
 import { PLAYER_COLLIDER, PLAYER_RUN_SPEED, PLAYER_WALK_SPEED } from "../../game/core/constants";
 import { frames, tex } from "../textures";
@@ -152,6 +154,9 @@ export class Player extends Entity {
   /** The weapon you're carrying, on your back / hip when your hands are free. */
   private sheath = new Sprite();
   private sheathId: string | null = null;
+  /** The weapon in hand mid-swing, for families the body sheet can't draw (see engine/weaponVisual). */
+  private held = new Sprite();
+  private heldId: string | null = null;
   private relicTwinkle = 0;
   private lastStandReady = 0;
   private stateTime = 0;
@@ -238,7 +243,10 @@ export class Player extends Entity {
     this.body = new CharacterSprite(anims, "idle_down", 1, 11, [...LAYERS]);
     this.sheath.anchor.set(0.5);
     this.sheath.visible = false;
-    this.view.addChild(this.chargeRing, this.sheath, this.body.view);
+    this.held.anchor.set(0.2, 0.8);
+    this.held.visible = false;
+    this.held.roundPixels = true;
+    this.view.addChild(this.chargeRing, this.sheath, this.body.view, this.held);
     this.bowSprite = new Sprite(tex(icon16Path("bow_wood")));
     this.bowSprite.anchor.set(0.5);
     this.bowSprite.visible = false;
@@ -346,7 +354,12 @@ export class Player extends Entity {
   /** Blade / tool head tint follows whatever is in hand for this animation. */
   private applyMetal(key: string) {
     let tint: number | null = null;
-    if (key === "attack") tint = this.looks.weapon ?? null;
+    if (key === "attack") {
+      // Swords show the sheet's blade in the icon's colours; other families
+      // hide it and hold their own sprite (syncHeld).
+      const id = usePlayerStore.getState().equipment.weapon;
+      tint = swingsSheetBlade(id) ? (iconTint(id) ?? this.looks.weapon ?? 0xffffff) : null;
+    }
     else if (key === "chop" || key === "mine") {
       const s = usePlayerStore.getState();
       const tool = bestTool(key === "chop" ? "axe" : "pickaxe", s.equipment, useInventoryStore.getState().stacks);
@@ -427,6 +440,26 @@ export class Player extends Entity {
     this.sheath.scale.set(mirror ? -s : s, s);
   }
 
+  /** Daggers, spears, maces: the weapon's own sprite at the measured grip of
+   * this attack frame, pointing where the thrust goes. */
+  private syncHeld() {
+    const id = usePlayerStore.getState().equipment.weapon ?? null;
+    const frames = this.body.anim.startsWith("attack_") && id && !swingsSheetBlade(id) ? BLADES[this.dir] : null;
+    const f = frames?.[Math.min(this.body.sprite.currentFrame, frames.length - 1)];
+    this.held.visible = !!f;
+    if (!f || !id) return;
+    if (id !== this.heldId) {
+      this.heldId = id;
+      this.held.texture = tex(icon16Path(getItem(id).icon));
+    }
+    const flip = this.dir === "side" && this.facingLeft;
+    const s = heldScale(id) * Math.max(0.8, f.len / 18);
+    this.held.position.set(flip ? -f.x : f.x, f.y);
+    this.held.scale.set(flip ? -s : s, s);
+    // Icons point up-right: turn that to the thrust direction.
+    this.held.rotation = this.dir === "down" ? (3 * Math.PI) / 4 : this.dir === "up" ? -Math.PI / 4 : flip ? -Math.PI / 4 : Math.PI / 4;
+  }
+
   private syncAnim(restart = false) {
     const key = this.animKey();
     const name = `${key}_${this.dir}`;
@@ -437,6 +470,7 @@ export class Player extends Entity {
     }
     this.body.setFlip(this.dir === "side" && this.facingLeft);
     this.syncSheath();
+    this.syncHeld();
     // Cadence follows speed: dodging is a sprint; swings follow the weapon.
     const sw = this.swing;
     this.body.setSpeed(this.state === "dodge" ? 1.7 : this.state === "attack" && sw ? sw.weapon.speed * swingSpeedMult(usePlayerStore.getState().talents) * (sw.winded ? 0.75 : 1) * (sw.heavy ? 0.85 : 1) : this.state === "charge" ? 0.5 : 1);
@@ -479,7 +513,7 @@ export class Player extends Entity {
     this.holdTime = held ? this.holdTime + dt : 0;
     if (!this.frozen && input.pressed("attack")) {
       this.attackBuffer = 0.3;
-      this.attackAim = input.pressedByMouse("attack") ? game.camera.screenToWorld(input.mouseX, input.mouseY) : null;
+      this.attackAim = input.pressedByMouse("attack") ? game.camera.screenToWorld(input.mouseX, input.mouseY) : this.stickAim(game);
     }
     const pressedDodge = !this.frozen && input.pressed("dodge");
     if (pressedDodge) this.dodgeBuffer = INPUT_BUFFER;
@@ -489,6 +523,10 @@ export class Player extends Entity {
     const wantsWhirl = !this.frozen && input.pressed("ability");
     const wantsParry = this.parryBuffer > 0;
     const wantsCast = !this.frozen && input.pressed("cast");
+    // △ / the heavy key: straight into the wind-up (holding attack still works).
+    const wantsHeavy = !this.frozen && input.pressed("heavy");
+    if (wantsHeavy) this.attackAim = this.stickAim(game);
+    const heldHeavy = held || (!this.frozen && input.held("heavy"));
     // Mana trickles back (magic only).
     const mMax = this.maxMana;
     if (mMax > 0) this.mana = Math.min(mMax, this.mana + MANA_REGEN * attunementMult(usePlayerStore.getState().talents) * dt);
@@ -614,7 +652,7 @@ export class Player extends Entity {
           this.moveBy(game, axis.x * PLAYER_WALK_SPEED * 0.35 * dt, axis.y * PLAYER_WALK_SPEED * 0.35 * dt);
           this.moving = true;
         }
-        if (!held || this.stateTime >= HEAVY.maxHold) {
+        if (!heldHeavy || this.stateTime >= HEAVY.maxHold) {
           if (k >= 1) {
             this.comboStep = 0;
             this.setState("attack");
@@ -703,8 +741,8 @@ export class Player extends Entity {
           this.beginSwing(game, axis);
           break;
         }
-        // Still holding after a swing: wind up a heavy.
-        if (!this.frozen && this.holdTime >= HEAVY.holdToCharge && this.attackCooldown <= 0.2 && !this.hasBow()) {
+        // Still holding after a swing (or the heavy button): wind up a heavy.
+        if (!this.frozen && (this.holdTime >= HEAVY.holdToCharge || wantsHeavy) && this.attackCooldown <= 0.2 && !this.hasBow()) {
           if (this.stamina < STAMINA.heavy) this.nagWinded(game);
           else {
             this.chargedFx = false;
@@ -729,6 +767,9 @@ export class Player extends Entity {
             this.dir = "side";
             this.facingLeft = axis.x < 0;
           } else if (axis.y !== 0) this.dir = axis.y < 0 ? "up" : "down";
+          // Right stick held: keep facing where it points (back off while facing a foe).
+          const aim = input.aim();
+          if (aim) this.faceToward(this.x + aim.x, this.y + aim.y);
           this.moveBy(game, axis.x * speed * dt, axis.y * speed * dt);
           this.moving = true;
           this.moveDir.x = axis.x;
@@ -738,6 +779,9 @@ export class Player extends Entity {
             this.stepTimer = this.running ? 0.22 : 0.3;
             game.fx.burst(this.x, this.y, "dust", this.running ? 3 : 1, { speed: 12, up: 10, height: 1, life: 0.35, size: 1 });
           }
+        } else if (!this.frozen) {
+          const aim = input.aim();
+          if (aim) this.faceToward(this.x + aim.x, this.y + aim.y);
         }
         break;
       }
@@ -754,15 +798,17 @@ export class Player extends Entity {
     const d = drunkLevel();
     if (d < 50) return axis;
     this.swayTime += dt;
-    const k = d >= 80 ? 0.55 : 0.3;
+    // A gentle weave (≈7° drunk, ≈13° wasted) — you still go where you point.
+    const k = d >= 80 ? 0.22 : 0.12;
     const moving = axis.x !== 0 || axis.y !== 0;
-    if (d >= 80) {
+    // Wasted, and never mid-fight: the odd stumble, a small one.
+    if (d >= 80 && !game.enemyNear(170)) {
       this.stumble -= dt;
       if (this.stumble <= 0) {
-        this.stumble = 2.5 + Math.random() * 3;
+        this.stumble = 5 + Math.random() * 4;
         const a = Math.random() * Math.PI * 2;
-        this.knockX += Math.cos(a) * 70;
-        this.knockY += Math.sin(a) * 70;
+        this.knockX += Math.cos(a) * 40;
+        this.knockY += Math.sin(a) * 40;
         if (Math.random() < 0.4) game.fx.text(this.x, this.y - 34, t("drunk.hic"), 0xffe0a0, { size: 7, life: 0.8 });
       }
     }
@@ -827,6 +873,13 @@ export class Player extends Entity {
       }
     }
     if (best) this.faceToward(best.x, best.y);
+  }
+
+  /** A point along the right stick (null when it's centred), used like a
+   * mouse click's target so swings, arrows and parries go where it points. */
+  private stickAim(game: Game): { x: number; y: number } | null {
+    const a = game.input.aim();
+    return a ? { x: this.x + a.x * 40, y: this.y - 10 + a.y * 40 } : null;
   }
 
   /** Kept for callers outside the loop (e.g. tests); goes through the combo. */
@@ -913,8 +966,10 @@ export class Player extends Entity {
     this.mana -= SPARK.cost;
     this.castCooldown = SPARK.cooldown;
     let angle: number;
-    if (axis.x !== 0 || axis.y !== 0) angle = Math.atan2(axis.y, axis.x);
-    else if (game.input.mouseInside) {
+    const aim = game.input.aim();
+    if (aim) angle = Math.atan2(aim.y, aim.x);
+    else if (axis.x !== 0 || axis.y !== 0) angle = Math.atan2(axis.y, axis.x);
+    else if (game.input.mouseAims) {
       const m = game.camera.screenToWorld(game.input.mouseX, game.input.mouseY);
       angle = Math.atan2(m.y - (this.y - 10), m.x - this.x);
     } else {
@@ -956,7 +1011,9 @@ export class Player extends Entity {
       return;
     }
     this.spend(PARRY.cost);
-    if (axis.x !== 0 || axis.y !== 0) this.faceToward(this.x + axis.x, this.y + axis.y);
+    const aim = game.input.aim();
+    if (aim) this.faceToward(this.x + aim.x, this.y + aim.y);
+    else if (axis.x !== 0 || axis.y !== 0) this.faceToward(this.x + axis.x, this.y + axis.y);
     this.parryLanded = false;
     this.parryCooldown = PARRY.cooldown;
     this.comboStep = 0;
@@ -989,6 +1046,7 @@ export class Player extends Entity {
     game.shake(2.5, 0.14);
     audio.sfx("hit", { pitch: 1.9 });
     audio.sfx("rare", { pitch: 1.6 });
+    RUMBLE.parry();
     awardSkillXp("defense", 3);
     return true;
   }
@@ -1080,6 +1138,7 @@ export class Player extends Entity {
       game.fx.burst(f.x, f.y, "crystal", 10, { speed: 40, up: 30, life: 0.4 });
       game.shake(1.5, 0.1);
       audio.sfx("hit", { pitch: 1.5 });
+      RUMBLE.hooked();
       if (tune.underRodded) game.fx.text(this.x, this.y - 36, t("fish.heavy"), 0xffc080, { size: 7, bold: true, life: 1.4 });
       return true;
     }
@@ -1142,6 +1201,7 @@ export class Player extends Entity {
           game.fx.burst(f.x, f.y, "crystal", 8, { speed: 24, up: 20, life: 0.4 });
           audio.sfx("rare", { pitch: 2 });
           game.shake(1, 0.08);
+          RUMBLE.bite();
         }
         break;
       case "bite":
@@ -1167,7 +1227,7 @@ export class Player extends Entity {
     const fish = f.fish!;
     const tune = x.tune;
     const input = game.input;
-    x.reeling = input.held("interact");
+    x.reeling = input.held("interact") || input.held("attack");
     x.lean = (input.held("moveRight") ? 1 : 0) - (input.held("moveLeft") ? 1 : 0);
 
     // Runs: a short warning (splash, arrow), then the fish hauls on the line.
@@ -1206,7 +1266,11 @@ export class Player extends Entity {
     // Reel animation: crank while reeling, strain during runs.
     this.body.hold(x.reeling ? (Math.floor(performance.now() / 110) % 2 ? 6 : 7) : 5);
     x.snapWarn = x.tension > 88 ? x.snapWarn + dt : 0;
-    if (x.tension > 88 && Math.random() < dt * 8) game.shake(0.8, 0.05);
+    if (x.tension > 88 && Math.random() < dt * 8) {
+      game.shake(0.8, 0.05);
+      // The line hums in your hands before it snaps.
+      RUMBLE.strain();
+    }
 
     if (x.tension >= 100) {
       loseFish();
@@ -1233,6 +1297,7 @@ export class Player extends Entity {
       game.fx.burst(f.x, f.y - 2, "crystal", 16, { speed: 50, up: 60 });
       game.fx.ring(f.x, f.y, 12, 0xbfe8ff, 0.3);
       game.shake(1.5, 0.1);
+      RUMBLE.landed();
       if (def.rarity !== "common") game.ui.pushLootReveal(res.itemId, 1);
       else game.ui.pushItemToast(res.itemId, itemName(res.itemId), 1, def.icon, def.rarity);
       audio.sfx(def.rarity === "common" ? "pickup" : "rare");
@@ -1332,6 +1397,7 @@ export class Player extends Entity {
     game.shake(3, 0.2);
     game.kick(this.x - fromX, this.y - fromY, 3);
     audio.sfx("player_hurt");
+    RUMBLE.hurt();
     this.comboStep = 0;
     this.comboWindow = 0;
     if (usePlayerStore.getState().hp <= 0) {
